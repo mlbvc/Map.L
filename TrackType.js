@@ -1,4 +1,3 @@
-
 const data = {
     PLAYER: "P", //运动员
     WORKER: "W", //工作人员

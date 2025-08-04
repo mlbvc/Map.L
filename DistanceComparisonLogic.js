@@ -1,9 +1,10 @@
-
 import BroadcastCenter from '../../Framework/Broadcast/BroadcastCenter'
 import MapPolyline from './Overlay/MapPolyline'
 import MapCircleMarker from './Overlay/MapCircleMarker'
 import MapText from './Overlay/MapText'
 import OverlayConfig from './OverlayConfig'
+import * as turf from '@turf/turf'
+
 const broadcastCenter = BroadcastCenter.getInstance()
 export default class DistanceComparisonLogic{
   static getInstance(){
@@ -35,19 +36,19 @@ export default class DistanceComparisonLogic{
   }
   /**
    * 更新路程对比
-   * @param  {[Object]} aMap        [地图对象]
+   * @param  {[Object]} mapboxgl        [地图对象]
    * @param  {[Object]} data        [路程对比数据]
    */
-  updateDistanceComparison(aMap, data){
-    if(!aMap || !data){
+  updateDistanceComparison(mapboxgl, data){
+    if(!mapboxgl || !data){
       return
     }
     //重置路程对比数据
     this._clearTimeout()
     this._stopHideInterval()
-    this._removePolylineMarker(aMap)
-    this._removePolyline(aMap)
-    this._removeDistanceMarker(aMap)
+    this._removePolylineMarker(mapboxgl)
+    this._removePolyline(mapboxgl)
+    this._removeDistanceMarker(mapboxgl)
     this.drawCount = []
     this.selectData = {}
     //更新显示路程对比
@@ -57,7 +58,7 @@ export default class DistanceComparisonLogic{
       this.selectData = distanceData
       for (let i = 0; i < info.length; i++) {
         this.drawCount[i] = 1
-        this._startDistanceInterval(aMap, info, i)
+        this._startDistanceInterval(mapboxgl, info, i)
       }
     }
   }
@@ -84,13 +85,13 @@ export default class DistanceComparisonLogic{
         // let loopCount = Math.ceil(addPointCount / content.length)
         for (let j = 0; j < content.length; j++) {
           let position = content[j].split(",")
-          path.push(new window.AMap.LngLat(position[1], position[0]))
+          path.push([position[1], position[0]])
           if(j < addPointCount){
             let posLng = Number(position[1])
             let posLat = Number(position[0])
             // for (let k = 0; k < loopCount; k++) {
               posLng -= 0.000001
-              let lnglat = new window.AMap.LngLat(posLng, posLat)
+              let lnglat = [posLng, posLat]
               // if(j < Number(addPointCount % content.length)){
                 path.push(lnglat)
               // }
@@ -116,11 +117,12 @@ export default class DistanceComparisonLogic{
   }
   /**
    * 播放路线
-   * @param  {[Object]} aMap  [地图对象]
+   * @param  {[Object]} mapboxgl  [地图对象]
    * @param  {[Object]} item  [一条路径数据]
    * @param  {[Number]} index [路径数组下标]
    */
-  _startDistanceInterval(aMap, data, index){
+  _startDistanceInterval(mapboxgl, data, index){
+    console.log('播放_startDistanceInterval')
     let item = data[index]
     this._clearTimeoutItem(index)
     this._stopHideIntervalItem(index)
@@ -138,61 +140,73 @@ export default class DistanceComparisonLogic{
       if(this.polylineStrokeWeight){
         config.strokeWeight = this.polylineStrokeWeight
       }
-      this.polylineArray[index] = new MapPolyline(aMap, config)
+      this.polylineArray[index] = new MapPolyline(mapboxgl, config, 'distance_comparison_line' + index)
     }
     else{
       this.polylineArray[index].setPath([item.path[0]])
       let opacity = this.polylineStrokeOpacity || 0.8
-      this.polylineArray[index].setOptions({strokeOpacity: opacity})
+      this.polylineArray[index].setLineOpacity(opacity)
     }
     //创建更新路程线段起始标记点
     if(!this.polylineMarkerArray[index]){
-      this.polylineMarkerArray[index] = new MapCircleMarker(aMap, {
+      this.polylineMarkerArray[index] = new MapCircleMarker(mapboxgl, {
         ...OverlayConfig.DistanceComparisonPolylineMarker,
         position:item.path[0],
-      })
+      }, "distance_comparison_circle" + index)
       window.AMap.event.addListener(
         this.polylineMarkerArray[index].getRoot(),
-        'moving', (e)=>this.onMarkerMoving(e, aMap, data, index))
+        'moving', (e)=>this.onMarkerMoving(e, mapboxgl, data, index))
       window.AMap.event.addListener(
         this.polylineMarkerArray[index].getRoot(),
-        'moveend', (e)=>this.onMarkerMoveend(e, aMap, data, index))
+        'moveend', (e)=>this.onMarkerMoveend(e, mapboxgl, data, index))
       window.AMap.event.addListener(
         this.polylineMarkerArray[index].getRoot(),
-        'movealong', (e)=>this.onMarkerMovealong(e, aMap, data, index))
+        'movealong', (e)=>this.onMarkerMovealong(e, mapboxgl, data, index))
+        console.log('123456789-------------------------------fuck')
+        this.polylineMarkerArray[index].getRoot().on('moving', (e)=>this.onMarkerMoving(e, mapboxgl, data, index))
+        this.polylineMarkerArray[index].getRoot().on('moveend', (e)=>this.onMarkerMoveend(e, mapboxgl, data, index))
+        this.polylineMarkerArray[index].getRoot().on('movealong', (e)=>this.onMarkerMovealong(e, mapboxgl, data, index))
     }
     else{
       this.polylineMarkerArray[index].stopMove()
-      this.polylineMarkerArray[index].setPosition(item.path[0].lng, item.path[0].lat)
+      this.polylineMarkerArray[index].setPosition(item.path[0].lat, item.path[0].lng)
     }
     //动画移动
-    let distance = window.AMap.GeometryUtil.distanceOfLine(item.path)
+    // let distance = window.AMap.GeometryUtil.distanceOfLine(item.path)
+    let distance = turf.distance(
+      [item.path[0].lng, item.path[0].lat],
+      [item.path[item.path.length - 1].lng, item.path[item.path.length - 1].lat],
+      { units: 'meters' }
+    )
     let speed = Number((distance / this.playSecond) * (60 * 60 / 1000))
     this.polylineMarkerArray[index].moveAlong(item.path, speed)
   }
-  onMarkerMoving(e, aMap, data, index){
+  onMarkerMoving(e, mapboxgl, data, index){
+    console.log('onMarkerMoving----------------------')
     this.polylineArray[index].setPath(e.passedPath)
   }
-  onMarkerMoveend(e, aMap, data, index){}
-  onMarkerMovealong(e, aMap, data, index){
+  onMarkerMoveend(e, mapboxgl, data, index){}
+  onMarkerMovealong(e, mapboxgl, data, index){
+    console.log('onMarkerMovealong')
     for (let i = 0; i < data.length; i++) {
       let markerItem = data[i]
       if(this.polylineMarkerArray[i]){
         this.polylineMarkerArray[i].stopMove()
+        console.log('onMarkerMovealong__________setPosition')
         this.polylineMarkerArray[i].setPosition(markerItem.path[0].lng, markerItem.path[0].lat)
       }
       if(this.polylineArray[i]){
         let opacity = this.polylineStrokeOpacity || 0.8
-        this.polylineArray[i].setOptions({strokeOpacity: opacity})
+        this.polylineArray[i].setLineOpacity(opacity)
         this.polylineArray[i].setPath(markerItem.path)
       }
       //显示路程标记，清除定时器
-      this._showDistance(aMap, markerItem, i)
+      this._showDistance(mapboxgl, markerItem, i)
       // 5秒后淡出隐藏路线对比
       if(this.selectData.id === markerItem.comparison_id){
         this._clearTimeoutItem(i)
         this.setTimeout[i] = setTimeout(()=>{
-          this._loopShowDistanceComparison(aMap, data, i)
+          this._loopShowDistanceComparison(mapboxgl, data, i)
         },5000)
       }
       else{
@@ -203,11 +217,11 @@ export default class DistanceComparisonLogic{
   }
   /**
    * 重复播放路线
-   * @param  {[Object]} aMap  [地图对象]
+   * @param  {[Object]} mapboxgl  [地图对象]
    * @param  {[Object]} item  [一条路径数据]
    * @param  {[Number]} index [路径数组下标]
    */
-  _loopShowDistanceComparison(aMap, data, index){
+  _loopShowDistanceComparison(mapboxgl, data, index){
     if(this.drawCount[index] >= this.drawSumCount){
       this.drawCount[index] = 0
       return
@@ -223,26 +237,22 @@ export default class DistanceComparisonLogic{
         this.drawCount[index] ++
       }
       this.polylineArray[index]
-        && this.polylineArray[index].setOptions({strokeOpacity: opacity})
+        && this.polylineArray[index].setLineOpacity(opacity)
       if(this.distanceMarker[index]){
-        let text = data[index].length + 'm'
-        if(data[index].height_diff !== null){
-          text += ' / +' + data[index].height_diff + 'm'
-        }
-        this.distanceMarker[index].setOpacity(text, opacity)
+        this.distanceMarker[index].setContent({ opacity: opacity })
       }
       if(opacity <= 0 && this.drawCount[index] <= this.drawSumCount){
-        this._startDistanceInterval(aMap, data, index)
+        this._startDistanceInterval(mapboxgl, data, index)
       }
     },200)
   }
   /**
    * 显示路程和爬高量
-   * @param  {[Object]} aMap  [地图对象]
+   * @param  {[Object]} mapboxgl  [地图对象]
    * @param  {[Object]} item  [一条路径数据]
    * @param  {[Number]} index [路径数组下标]
    */
-  _showDistance(aMap, data, index){
+  _showDistance(mapboxgl, data, index){
     if(Number(data.latitude) <= 0 ||
        Number(data.longitude) <= 0 ||
        Number(data.length) <= 0 ){
@@ -251,68 +261,66 @@ export default class DistanceComparisonLogic{
     }
     if(!this.distanceMarker[index]){
       let color = data.color || this.defaultColor
-      this.distanceMarker[index] = new MapText(aMap, {
+      this.distanceMarker[index] = new MapText(mapboxgl, {
         ...OverlayConfig.DistanceComparisonMarker,
-        position: new window.AMap.LngLat(data.longitude, data.latitude),
+        position: new window.L.latLng(data.latitude, data.longitude),
         color: color
-      })
-      this.distanceSize && this.distanceMarker[index].setTextSize(this.distanceSize)
+      }, 'distance_comparison_text' + index)
       let text = data.length + 'm'
       if(data.height_diff !== null){
         text += ' / +' + data.height_diff + 'm'
       }
-      this.distanceMarker[index].setText(text)
+      this.distanceMarker[index].setContent({
+        text: text,
+        size: this.distanceSize
+      })
     }
     else{
-      let text = data.length + 'm'
-      if(data.height_diff !== null){
-        text += ' / +' + data.height_diff + 'm'
-      }
-      this.distanceMarker[index].setOpacity(text , 1)
+      this.distanceMarker[index].setContent({ opacity: 1 })
     }
   }
   /**
    * 删除路线标记点
-   * @param  {[Object]} aMap [地图对象]
+   * @param  {[Object]} mapboxgl [地图对象]
    */
-  _removePolylineMarker(aMap){
+  _removePolylineMarker(mapboxgl){
     if(this.polylineMarkerArray.length <= 0){
       return
     }
     for (let i = 0; i < this.polylineMarkerArray.length; i++) {
       let item = this.polylineMarkerArray[i]
       item && item.stopMove()
-      item && aMap.remove(item.getRoot())
+      item && mapboxgl.remove(item.getRoot())
       this.polylineMarkerArray[i] = null
     }
     this.polylineMarkerArray = []
   }
   /**
    * 删除路线
-   * @param  {[Object]} aMap [地图对象]
+   * @param  {[Object]} mapboxgl [地图对象]
    */
-  _removePolyline(aMap){
+  _removePolyline(mapboxgl){
     if(this.polylineArray.length <= 0){
       return
     }
     for (let i = 0; i < this.polylineArray.length; i++) {
       let item = this.polylineArray[i]
-      item && aMap.remove(item.getRoot())
+      item && item.remove()
       this.polylineArray[i] = null
     }
     this.polylineArray = []
   }
   /**
    * 删除路程标记点
-   * @param  {[Object]} aMap [地图对象]
+   * @param  {[Object]} mapboxgl [地图对象]
    */
-  _removeDistanceMarker(aMap){
+  _removeDistanceMarker(mapboxgl){
     if(this.distanceMarker.length <= 0){
       return
     }
     for (let i = 0; i < this.distanceMarker.length; i++) {
       let item = this.distanceMarker[i]
-      item && aMap.remove(item.getRoot())
+      item && item.remove()
       this.distanceMarker[i] = null
     }
     this.distanceMarker = []
@@ -369,9 +377,7 @@ export default class DistanceComparisonLogic{
     for (let i = 0; i < this.polylineArray.length; i++) {
       let item = this.polylineArray[i]
       if(item){
-        item.setOptions({
-          strokeOpacity: this.polylineStrokeOpacity
-        })
+        item.setLineOpacity(this.polylineStrokeOpacity)
       }
     }
   }
@@ -383,9 +389,7 @@ export default class DistanceComparisonLogic{
     for (let i = 0; i < this.polylineArray.length; i++) {
       let item = this.polylineArray[i]
       if(item){
-        item.setOptions({
-          strokeWeight: this.polylineStrokeWeight
-        })
+        item.setLineWidth(this.polylineStrokeWeight)
       }
     }
   }
@@ -397,8 +401,7 @@ export default class DistanceComparisonLogic{
     for (let i = 0; i < this.distanceMarker.length; i++) {
       let item = this.distanceMarker[i]
       if(item){
-        item.setTextSize(data.value)
-        item.setText(item.getTextString())
+        item.setContent({ size: data.value })
       }
     }
   }

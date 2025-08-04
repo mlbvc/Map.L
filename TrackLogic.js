@@ -1,9 +1,10 @@
-
 import Util from '../../Common/Utils/Util'
 import OverlayConfig from './OverlayConfig'
 import TrackFactory from './Track/TrackFactory'
 import BroadcastCenter from '../../Framework/Broadcast/BroadcastCenter'
 import TrackType from './TrackType'
+import AnimationLogic from './AnimationLogic'
+const animationLogic = AnimationLogic.getInstance()
 const util = Util.getInstance()
 const trackFactory = TrackFactory.getInstance()
 const broadcastCenter = BroadcastCenter.getInstance()
@@ -59,13 +60,16 @@ export default class TrackLogic{
       this._windowOnfocus.bind(this))
     broadcastCenter.addEventListener("window_onblur",
       this._windowOnblur.bind(this))
+    // 开始轨迹动画
+    console.log('track-logic!!!!!!!!!!!!!!!!!!!')
+    animationLogic.startAnimation()
   }
   /**
    * 删除所有覆盖物对象
-   * @param  {[Amap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    */
-  removeAllTarckItem(aMap){
-    if (!aMap){
+  removeAllTarckItem(mapboxgl){
+    if (!mapboxgl){
       return
     }
     for (let type in this.overlayList){
@@ -78,15 +82,16 @@ export default class TrackLogic{
   }
   /**
    * 更新地图
-   * @param  {[AMap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    * @param  {[Object]} data [轨迹数据]
    * @param  {[Date]} curTime [当前播放时间]
    * @param  {[Boolean]} isJump [是否使用跳点方式]
    */
-  updateMapTrack(aMap, data, curTime, isJump = false){
-    // this.updateMapDirectTrack(aMap, data, curTime, isJump)
+  updateMapTrack(mapboxgl, data, curTime, isJump = false){
+    // this.updateMapDirectTrack(mapboxgl, data, curTime, isJump)
     this.dataPool.push({
-      aMap: aMap,
+      //aMap: mapboxgl,
+      mapboxgl: mapboxgl,
       data: util.deepCopy(data),
       curTime: curTime,
       isJump: isJump,
@@ -95,14 +100,14 @@ export default class TrackLogic{
   }
   /**
    * 直接更新地图，不优化
-   * @param  {[AMap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    * @param  {[Object]} data [轨迹数据]
    * @param  {[Date]} curTime [当前播放时间]
    * @param  {[Boolean]} isJump [是否使用跳点方式]
    */
-  updateMapDirectTrack(aMap, data, curTime, isJump = false){
+  updateMapDirectTrack(mapboxgl, data, curTime, isJump = false){
     this._setDeletableTag()
-    this._updateOverlayListItem(aMap, data)
+    this._updateOverlayListItem(mapboxgl, data)
     this._updateData(data, curTime, isJump)
     this._removeDeletableItem()
   }
@@ -125,16 +130,16 @@ export default class TrackLogic{
     }
   }
   /**
+   * 播放轨迹动画
+   */
+  // startTrackMove(){
+  //   animationLogic.setAnimationUpdateState(true)
+  // }
+  /**
    * 停止轨迹动画
    */
   stopTrackMove(){
-    for (let type in this.overlayList){
-      let list  = this.overlayList[type]
-      for (let key in list){
-        let item = list[key]
-        item.stopMove()
-      }
-    }
+    animationLogic.setAnimationUpdateState(false)
   }
   /**
    * 获取目标设备颜色
@@ -194,8 +199,8 @@ export default class TrackLogic{
   /**
    * 判断运动员是否在屏幕外
    */
-  isPlayerOffScreen(aMap) {
-    if (!aMap) {
+  isPlayerOffScreen(mapboxgl) {
+    if (!mapboxgl) {
       return
     }
     if (this.overlayList[TrackType.PLAYER]) {
@@ -203,10 +208,12 @@ export default class TrackLogic{
         let item = this.overlayList[TrackType.PLAYER][id]
         if (item) {
           let position = item.getPosition()
-          let mapBounds = aMap.getBounds()
+          let mapBounds = mapboxgl.getBounds()
           if (position) {
+            console.log('new', new window.L.latLng(position.lat, position.lng))
+            console.log('not new', window.L.latLng(position.lat, position.lng))
             let isPointInBounds = mapBounds.contains(
-              new window.AMap.LngLat(position.lng, position.lat))
+              new window.L.latLng(position.lat, position.lng))
             if (!isPointInBounds) {
               return true
             }
@@ -220,21 +227,39 @@ export default class TrackLogic{
   /**
    * 调整地图范围
    */
-  setPlayerFitView(aMap){
-    if (!aMap || !this.overlayList[TrackType.PLAYER]) {
+  setPlayerFitView(mapboxgl){
+    if (!mapboxgl || !this.overlayList[TrackType.PLAYER]) {
       return
     }
-    let allPlayersMarker = []
+    let minX
+    let minY
+    let maxX
+    let maxY
     for (let id in this.overlayList[TrackType.PLAYER]) {
       let item = this.overlayList[TrackType.PLAYER][id]
       if (item) {
         let marker = item.getTextMarker()
         if (marker) {
-          allPlayersMarker.push(marker)
+          let pos = item.getPosition()
+          if(isNaN(minX)) minX = pos.lng
+          if(isNaN(minY)) minY = pos.lat
+          if(isNaN(maxX)) maxX = pos.lng
+          if(isNaN(maxY)) maxY = pos.lat
+          minX = pos.lng < minX? pos.lng : minX
+          minY = pos.lat < minY? pos.lat : minY
+          maxX = pos.lng > maxX? pos.lng : maxX
+          maxY = pos.lat > maxY? pos.lat : maxY
         }
       }
     }
-    aMap.setFitView(allPlayersMarker)
+    // if(minX === maxX && minY === maxY){
+    //   mapboxgl.panTo([minX, minY])
+    //   return
+    // }
+    let southWest = window.L.latLng(minY, minX)
+    let northEast = window.L.latLng(maxY, maxX)
+    let bound = new window.L.latLngBounds(northEast, southWest)
+    mapboxgl.fitBounds(bound)
   }
   /**
    * 获取目标轨迹动画是否移动完成
@@ -332,7 +357,7 @@ export default class TrackLogic{
       }
       let target = this.dataPool[0]
       let data = target.data
-      let aMap = target.aMap
+      let mapboxgl = target.mapboxgl
       let curTime = target.curTime
       let isJump = target.isJump
       let isUpdating = target.isUpdating
@@ -341,10 +366,10 @@ export default class TrackLogic{
         //更新设备删除标记
         target.isUpdating = true
         this._setDeletableTag()
-        this._updateOverlayListItem(aMap, data)
+        this._updateOverlayListItem(mapboxgl, data)
         this._removeDeletableItem()
       }
-      let updateData = data.splice(0,OverlayConfig.TrackUpdateCount)
+      let updateData = data.splice(0, OverlayConfig.TrackUpdateCount)
       this._updateData(updateData, curTime, isJump)
       //如果轨迹数据已经更新完了，删除该数据包
       if (data.length <= 0){
@@ -368,6 +393,7 @@ export default class TrackLogic{
    * @param  {[Boolean]} isJump [是否使用跳点方式]
    */
   _updateData(data, curTime, isJump = false){
+    console.log('tracklogic, data', data)
     if (!data || data.length <= 0 || !this.isShowTrack){
       return
     }
@@ -397,11 +423,11 @@ export default class TrackLogic{
   }
   /**
    * 更新或者初始化覆盖物列表状态
-   * @param  {[AMap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    * @param  {[Object]} item [单个设备轨迹信息]
    */
-  _updateOverlayListItem(aMap, data){
-    if (!aMap || !data || data.length <= 0){
+  _updateOverlayListItem(mapboxgl, data){
+    if (!mapboxgl || !data || data.length <= 0){
       return
     }
     for (let i = 0; i < data.length; ++i){
@@ -413,7 +439,7 @@ export default class TrackLogic{
         this.overlayList[type][id].setDeletable(false)
       }
       else {
-        this.overlayList[type][id] = trackFactory.create(type, aMap, item)
+        this.overlayList[type][id] = trackFactory.create(type, mapboxgl, item, animationLogic)
         this.overlayList[type][id].updateOverlayConfig(this.overlayConfigObj)
         this.overlayList[type][id].updateCenterPlayer(this.centerPlayerId)
         this.overlayList[type][id].updateDeviceTrackUI(this.selectDeviceData)
@@ -509,6 +535,7 @@ export default class TrackLogic{
    */
   _onChangeMarkMoveMutiple(data){
     this.markMoveMutipleData = data
+    animationLogic.setMoveMutiple(data)
     for (let type in this.overlayList){
       let list  = this.overlayList[type]
       for (let key in list){

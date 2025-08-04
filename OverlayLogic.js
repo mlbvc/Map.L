@@ -1,4 +1,3 @@
-
 import TrackLogic from './TrackLogic'
 import StaticOverlayLogic from './StaticOverlayLogic'
 import AlarmOverlayLogic from './AlarmOverlayLogic'
@@ -44,93 +43,93 @@ export default class OverlayLogic{
   }
   /**
    * 删除所有覆盖物对象
-   * @param  {[Amap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    */
-  removeAllMapOverlay(aMap){
-    if (!aMap){
+  removeAllMapOverlay(mapboxgl){
+    if (!mapboxgl){
       console.log("删除地图所有覆盖物对象失败！")
       return
     }
-    trackLogic.removeAllTarckItem(aMap)
-    staticOverlayLogic.removeAllStaticItem(aMap)
-    alarmOverlayLogic.removeAllAlarmItem(aMap)
+    trackLogic.removeAllTarckItem(mapboxgl)
+    staticOverlayLogic.removeAllStaticItem(mapboxgl)
+    alarmOverlayLogic.removeAllAlarmItem(mapboxgl)
   }
   /**
    * 更新路程对比
-   * @param  {[Object]} aMap        [地图对象]
+   * @param  {[Object]} mapboxgl        [地图对象]
    * @param  {[Object]} data        [路程对比数据]
    */
-  updateMapDistanceComparison(aMap, data){
-    if(!aMap){
+  updateMapDistanceComparison(mapboxgl, data){
+    if(!mapboxgl){
       console.log('设置地图路程对比失败')
       return
     }
-    distanceComparisonLogic.updateDistanceComparison(aMap, data)
+    distanceComparisonLogic.updateDistanceComparison(mapboxgl, data)
   }
   /**
    * 初始化签到点图片
-   * @param  {[Object]} aMap        [地图对象]
+   * @param  {[Object]} mapboxgl        [地图对象]
    * @param  {[Object]} map_info        [地图覆盖图片信息]
    * @param  {[Array]} sign_image_info [签到点图片信息]
    */
-  initMapSignImage(aMap, map_info, sign_image_info){
-    if(!aMap){
+  initMapSignImage(mapboxgl, map_info, sign_image_info){
+    if(!mapboxgl){
       console.log('初始化签到点图片失败')
       return
     }
-    signImageLogic.initSignImage(aMap, map_info, sign_image_info)
+    signImageLogic.initSignImage(mapboxgl, map_info, sign_image_info)
   }
   /**
    * 更新签到点图片
-   * @param  {[Object]} aMap            [地图对象]
+   * @param  {[Object]} mapboxgl            [地图对象]
    * @param  {[Object]} map_info        [地图覆盖图片信息]
    * @param  {[Object]} sign_image_info [签到点图片信息]
    * @param {String} isPassSetPanTo [是否设置签到点旋转中心]
    * @param  {Object} [config={}]     [签到点图片配置]
    */
-  updateMapSignImage(aMap, map_info, sign_image_info, isPassSetPanTo, config={}){
-    if(!aMap){
+  updateMapSignImage(mapboxgl, map_info, sign_image_info, isPassSetPanTo, config={}){
+    if(!mapboxgl){
       console.log('设置地图标记点图片失败')
       return
     }
-    signImageLogic.updateSignImage(aMap, map_info, sign_image_info, isPassSetPanTo, config={})
+    signImageLogic.updateSignImage(mapboxgl, map_info, sign_image_info, isPassSetPanTo, config={})
   }
   /**
    * 绘制路线
-   * @param  {[Object]} aMap        [地图对象]
+   * @param  {[Object]} mapboxgl        [地图对象]
    * @param  {[Object]} data        [地图数据]
    */
-  drawMapRoute(aMap, data){
-    if(!aMap){
+  drawMapRoute(mapboxgl, data){
+    if(!mapboxgl){
       console.log('设置地图多边形失败')
       return
     }
-    staticOverlayLogic.drawRoute(aMap, data)
+    staticOverlayLogic.drawRoute(mapboxgl, data)
   }
   /**
    * 更新多边形覆盖物
-   * @param  {[Object]} aMap        [地图对象]
+   * @param  {[Object]} mapboxgl        [地图对象]
    * @param  {[Object]} data        [地图数据]
    */
-  updateMapPolygon(aMap, data){
-    if(!aMap){
+  updateMapPolygon(mapboxgl, data){
+    if(!mapboxgl){
       console.log('设置地图多边形失败')
       return
     }
-    staticOverlayLogic.updatePolygon(aMap, data)
+    staticOverlayLogic.updatePolygon(mapboxgl, data)
   }
   /**
    * 更新图片覆盖物
-   * @param  {[Object]} aMap        [地图对象]
+   * @param  {[Object]} mapboxgl        [地图对象]
    * @param  {[Object]} data        [地图数据]
    * @param  {Object} [config={}] [图片覆盖物配置属性]
    */
-  updateMapGroundImage(aMap, data, config={}){
-    if(!aMap){
+  updateMapGroundImage(mapboxgl, data, config={}){
+    if(!mapboxgl){
       console.log('设置地图叠加图片失败')
       return
     }
-    staticOverlayLogic.updateGroundImage(aMap, data, config)
+    staticOverlayLogic.updateGroundImage(mapboxgl, data, config)
   }
   /**
    * 是否有地图叠加图片
@@ -141,58 +140,58 @@ export default class OverlayLogic{
   /**
    * 是否有运动员在屏幕外
    */
-  isPlayerOffMapScreen(aMap){
-    if(!aMap){
+  isPlayerOffMapScreen(mapboxgl){
+    if(!mapboxgl){
       return
     }
-    return trackLogic.isPlayerOffScreen(aMap)
+    return trackLogic.isPlayerOffScreen(mapboxgl)
   }
   /**
    * 设置地图可视范围，显示所有运动员
    */
-  setPlayerFitMapView(aMap){
-    if(!aMap){
+  setPlayerFitMapView(mapboxgl){
+    if(!mapboxgl){
       return
     }
-    trackLogic.setPlayerFitView(aMap)
+    trackLogic.setPlayerFitView(mapboxgl)
   }
   /**
    * 设置地图图层类型
    */
-  setMapLayer(aMap, type, isRoadNet){
-    if(!aMap){
+  setMapLayer(mapboxgl, type, isRoadNet){
+    if(!mapboxgl){
       console.log('设置地图图层类型失败')
       return
     }
-    staticOverlayLogic.setMapLayer(aMap, type, isRoadNet)
+    staticOverlayLogic.setMapLayer(mapboxgl, type, isRoadNet)
   }
   /**
    * 更新地图覆盖物数据
-   * @param  {[AMap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    * @param  {[Object]} data [轨迹数据]
    * @param  {[Date]} curTime [当前播放时间]
    * @param  {[Boolean]} isJump [是否使用跳点方式]
    */
-  updateMapOverlay(aMap, data, curTime, isJump = false){
-    if (!aMap || !data || !curTime){
+  updateMapOverlay(mapboxgl, data, curTime, isJump = false){
+    if (!mapboxgl || !data || !curTime){
       console.log("更新地图数据失败！")
       return
     }
-    trackLogic.updateMapTrack(aMap, data, curTime, isJump)
+    trackLogic.updateMapTrack(mapboxgl, data, curTime, isJump)
   }
   /**
    * 直接更新地图覆盖物数据，不优化
-   * @param  {[AMap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    * @param  {[Object]} data [轨迹数据]
    * @param  {[Date]} curTime [当前播放时间]
    * @param  {[Boolean]} isJump [是否使用跳点方式]
    */
-  updateMapOverlayDirect(aMap, data, curTime, isJump = false){
-    if (!aMap || !data || !curTime){
+  updateMapOverlayDirect(mapboxgl, data, curTime, isJump = false){
+    if (!mapboxgl || !data || !curTime){
       console.log("更新地图数据失败！")
       return
     }
-    trackLogic.updateMapDirectTrack(aMap, data, curTime, isJump)
+    trackLogic.updateMapDirectTrack(mapboxgl, data, curTime, isJump)
   }
   /**
    * 设置轨迹显示更新状态
@@ -201,6 +200,12 @@ export default class OverlayLogic{
     trackLogic.setShowStatus(isShow)
   }
   /**
+   * 播放轨迹动画
+   */
+  // startTrackMove(){
+  //   trackLogic.startTrackMove()
+  // }
+  /**
    * 停止轨迹动画
    */
   stopTrackMove(){
@@ -208,29 +213,29 @@ export default class OverlayLogic{
   }
   /**
    * 更新警报
-   * @param  {[AMap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    * @param  {[Array]} data [警报数据]
    * @param  {[Number]} iconType [报警图标是否跟随运动员]
    */
-  updateMapAlarm(aMap, data, icon_type){
-    if (!aMap || !data){
+  updateMapAlarm(mapboxgl, data, icon_type){
+    if (!mapboxgl || !data){
       console.log("更新警报数据失败！")
       return
     }
-    alarmOverlayLogic.updateAlarm(aMap, data, icon_type)
+    alarmOverlayLogic.updateAlarm(mapboxgl, data, icon_type)
   }
   /**
    * 设置警报
-   * @param  {[AMap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    * @param  {[Array]} data [警报数据]
    * @param  {[Number]} iconType [报警图标是否跟随运动员]
    */
-  setAlarm(aMap, data, icon_type){
-    if (!aMap || !data){
+  setAlarm(mapboxgl, data, icon_type){
+    if (!mapboxgl || !data){
       console.log("更新警报数据失败！")
       return
     }
-    alarmOverlayLogic.setAlarm(aMap, data, icon_type)
+    alarmOverlayLogic.setAlarm(mapboxgl, data, icon_type)
   }
   /**
    * 设置是否显示警报UI

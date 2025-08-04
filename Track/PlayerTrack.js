@@ -1,4 +1,3 @@
-
 import BaseTrack from "./BaseTrack"
 import MapText from '../Overlay/MapText'
 import MapCircleMarker from '../Overlay/MapCircleMarker'
@@ -24,6 +23,12 @@ export default class PlayerTrack extends BaseTrack {
     this.color = colorCenter.getColor()
     this.playerName = this.data.initials || this.data.name || ''
     this.isCenter = false //是否将运动员位置设为地图中心
+    broadcastCenter.addEventListener(
+      'updatePlayerNameText',
+      this._updateTrackNameText.bind(this))
+    broadcastCenter.addEventListener(
+      'updatePlayerMarkerIcon',
+      this._updateTrackMarkerIcon.bind(this))
   }
   /**
    * 根据设置参数更新运动员UI
@@ -69,9 +74,10 @@ export default class PlayerTrack extends BaseTrack {
       if(state){
         text = this.playerName + " " + this.curSpeed + "km/h"
       }
-      this.textSize && this.text.setTextSize(this.textSize)
-      this.text.setText(text)
-      this.text.setOffsetInTextLength(text)
+      this.text.setContent({
+        size: this.textSize,
+        text: text
+      })
     }
   }
   /**
@@ -87,14 +93,14 @@ export default class PlayerTrack extends BaseTrack {
       let lat = this.position.lat
       let lng = this.position.lng
       if(lat && lng){
-        this.aMap.setCenter(new window.AMap.LngLat(lng, lat))
+        this.mapboxgl.panTo(new window.L.LatLng(lat, lng))
         zIndexCircle = OverlayConfig.maxzIndex
         zIndexIcon = OverlayConfig.maxzIndex
         zIndexText = OverlayConfig.maxzIndex
       }
     }
-    this.circleMarker && this.circleMarker.setCenterCircle(this.isCenter)
-    this.iconMarker && this.iconMarker.setCenterIcon(this.isCenter)
+    this.circleMarker && this.circleMarker.setCenter(this.isCenter)
+    this.iconMarker && this.iconMarker.setCenter(this.isCenter)
     this.circleMarker && this.circleMarker.setzIndex(zIndexCircle)
     this.iconMarker && this.iconMarker.setzIndex(zIndexIcon)
     this.text && this.text.setzIndex(zIndexText)
@@ -107,9 +113,7 @@ export default class PlayerTrack extends BaseTrack {
     if(newValue !== this.polylineStrokeOpacity){
       this.polylineStrokeOpacity = newValue
       if(this.polyline){
-        this.polyline.setOptions({
-          strokeOpacity: this.polylineStrokeOpacity
-        })
+        this.polyline.setLineOpacity(this.polylineStrokeOpacity)
       }
     }
   }
@@ -137,9 +141,7 @@ export default class PlayerTrack extends BaseTrack {
     if(newValue !== this.polylineStrokeWeight){
       this.polylineStrokeWeight = newValue
       if(this.polyline){
-        this.polyline.setOptions({
-          strokeWeight: this.polylineStrokeWeight
-        })
+        this.polyline.setLineWidth(this.polylineStrokeWeight)
       }
     }
   }
@@ -153,14 +155,10 @@ export default class PlayerTrack extends BaseTrack {
       this.circleMarkerSize = diameter
       this.iconMarkerSize = value
       if(this.circleMarker){
-        this.circleMarker.setCircleMarkerSize(diameter)
-        this.circleMarker.setContent()
-        this.circleMarker.setOffset()
+        this.circleMarker.setContent({ size: diameter })
       }
       if(this.iconMarker){
-        this.iconMarker.setIconSize(value)
-        this.iconMarker.setContent()
-        this.iconMarker.setOffset()
+        this.iconMarker.setContent({ size: value })
       }
       broadcastCenter.pushEvent('updateAlarmIconSize', value)
     }
@@ -186,9 +184,10 @@ export default class PlayerTrack extends BaseTrack {
       this.playerName = this.data.initials?this.data.initials:this.data.name
     }
     if(this.text){
-      this.text.setFlag(Flags[this.data.country])
-      this.text.setText(this.playerName)
-      this.text.setOffsetInTextLength(this.playerName)
+      this.text.setContent({
+        flag: Flags[this.data.country],
+        text: this.playerName
+      })
     }
   }
   /**
@@ -198,9 +197,7 @@ export default class PlayerTrack extends BaseTrack {
     if(value !== this.textSize){
       this.textSize = value
       if(this.text){
-        this.text.setTextSize(value)
-        this.text.setText(this.playerName)
-        this.text.setOffsetInTextLength(this.playerName)
+        this.text.setContent({ size: value })
       }
     }
   }
@@ -224,14 +221,10 @@ export default class PlayerTrack extends BaseTrack {
       || oldData.initials !== this.data.initials
       || oldData.number_book !== this.data.number_book
       || oldData.country !== this.data.country){
-      this._updateTrackNameText()
+      broadcastCenter.pushEvent('updatePlayerNameText')
     }
     if(oldData.image !== this.data.image){
-      this._updateTrackMarkerIcon()
-    }
-    if(oldData.fadeOpacit !== this.data.fadeOpacit){
-      let value = this.data.fadeOpacit
-      this._updateTrackMarkerOpacit(value)
+      broadcastCenter.pushEvent('updatePlayerMarkerIcon')
     }
   }
   /**
@@ -245,22 +238,7 @@ export default class PlayerTrack extends BaseTrack {
    */
   _updateTrackMarkerIcon(){
     if(this.iconMarker){
-      this.iconMarker.setImage(this.data.image)
-      this.iconMarker.setContent()
-    }
-  }
-  /**
-   * 设置轨迹标记点透明度
-   */
-  _updateTrackMarkerOpacit(value){
-    this.text && this.text.setOpacity(this.playerName, value)
-    if(this.iconMarker){
-      this.iconMarker.setOpacity(value)
-      this.iconMarker.setContent()
-    }
-    if(this.circleMarker){
-      this.circleMarker.setOpacity(value)
-      this.circleMarker.setContent()
+      this.iconMarker.setContent({ image: this.data.image })
     }
   }
   /**
@@ -275,8 +253,6 @@ export default class PlayerTrack extends BaseTrack {
    */
   _stopMove(){
     this.text && this.text.stopMove()
-    this.circleMarker && this.circleMarker.stopMove()
-    this.iconMarker && this.iconMarker.stopMove()
     this.endMarker && this.endMarker.stopMove()
   }
   /**
@@ -320,12 +296,13 @@ export default class PlayerTrack extends BaseTrack {
       if (isJump){
         let lat = this.position.lat
         let lng = this.position.lng
-        this.aMap.setCenter(new window.AMap.LngLat(lng, lat))
+        this.mapboxgl.panTo(new window.L.LatLng(lat, lng))
       }
       else {
         if (this.isMoveEnd){
-          let targetPos = this.moveAlongArray[0]
-          targetPos && this.aMap.setCenter(targetPos)
+          let targetPos = this.moveAlongPolyline[0]
+          targetPos && this.mapboxgl.panTo(
+            new window.L.LatLng(targetPos.lat, targetPos.lng))
         }
       }
     }
@@ -334,9 +311,9 @@ export default class PlayerTrack extends BaseTrack {
    * 更新UI颜色
    */
   _updateUIColor(){
+    this.polyline && this.polyline.setLineColor(this.color)
     this.circleMarker && this.circleMarker.setContent({color:this.color})
-    this.polyline && this.polyline.setOptions({strokeColor: this.color})
-    this.text && this.text.setText(this.playerName, {color: this.color})
+    this.text && this.text.setContent({ color: this.color })
   }
   /**
    * 更新或者初始化文本
@@ -350,20 +327,25 @@ export default class PlayerTrack extends BaseTrack {
     }
     let lat = this.position.lat
     let lng = this.position.lng
+    
     if (this.text){
       if(this.isDataUpdate){
         if (isJump){
           this.text.stopMove()
-          this.text.setPosition(lng, lat)
+          this.text.setPosition(lat, lng)
           this.isMoveEnd = true
         }
         else {
           if (this.isMoveEnd){
             this.text.stopMove()
-            let speed = this._getSpeed()
-            let targetPos = this.moveAlongArray[0]
-            if (targetPos && speed > 0){
-              this.text.moveTo(targetPos.lng, targetPos.lat, speed)
+            let duration = this._getDuration()
+            let targetPos = this.moveAlongPolyline[0]
+            if (targetPos && duration > 0){
+              // 修复：只移动text，circleMarker通过_updateAnimationMarker同步跟随
+              console.log('调用addMoveToAnimation - text', this.sn, this.text, targetPos, duration)
+              this.animationLogic.addMoveToAnimation(this.sn, this.text, targetPos, duration)
+              
+              this.isMoveEnd = false
             }
           }
         }
@@ -375,19 +357,23 @@ export default class PlayerTrack extends BaseTrack {
     else {
       let config = {
         ...OverlayConfig.TextString,
-        position: new window.AMap.LngLat(lng, lat),
+        position: new window.L.latLng(lat, lng),
         color: this.color,
       }
-      this.text = new MapText(this.aMap, config, this.sn)
-      this.textSize && this.text.setTextSize(this.textSize)
-      this.text.setFlag(Flags[this.data.country])
-      this.text.setText(this.playerName)
-      this.data.fadeOpacit && this.text.setOpacity(this.playerName, this.data.fadeOpacit)
-      this.text.setOffsetInTextLength(this.playerName)
+      this.text = new MapText(this.mapboxgl, config, this.sn)
+      this.text.setContent({
+        size: this.textSize,
+        flag: Flags[this.data.country],
+        text: this.playerName
+      })
+      this.text.setOffset()
       this.text.stopMove()
       this.markerCursor && this.text.setCursor(this.markerCursor)
-      window.AMap.event.addListener(
-        this.text.getRoot(), 'click', ()=>this._onClickMarker(this.text))
+      this.text.click(()=>this._onClickMarker(this.text))
+      console.log('_updateMapText 添加动画监听')
+      // 修复：通过AnimationLogic添加监听，确保轨迹同步
+      this.animationLogic.addListenerMoving(this.sn, this.onMarkerMoving.bind(this))
+      this.animationLogic.addListenerMoveend(this.sn, this.onMarkerMoveend.bind(this))
     }
   }
   /**
@@ -396,8 +382,6 @@ export default class PlayerTrack extends BaseTrack {
    */
   _updateMarkers(isJump = false){
     if (!this._checkPosition()){
-      this.circleMarker && this.circleMarker.stopMove()
-      this.iconMarker && this.iconMarker.stopMove()
       console.warn('PlayerTrack-_updateMarkers, 参数错误')
       return
     }
@@ -406,16 +390,14 @@ export default class PlayerTrack extends BaseTrack {
     if (this.data.image){
       this._updateIconMarker(lng, lat, isJump)
       if (this.circleMarker){
-        this.circleMarker.stopMove()
-        this.aMap.remove(this.circleMarker.getRoot())
+        this.circleMarker.remove()
         this.circleMarker = null
       }
     }
     else {
       this._updateCircleMarker(lng, lat, isJump)
       if (this.iconMarker){
-        this.iconMarker.stopMove()
-        this.aMap.remove(this.iconMarker.getRoot())
+        this.iconMarker.remove()
         this.iconMarker = null
       }
     }
@@ -424,20 +406,12 @@ export default class PlayerTrack extends BaseTrack {
     if(this.circleMarker){
       if(this.isDataUpdate){
         if (isJump){
-          this.circleMarker.stopMove()
-          this.circleMarker.setPosition(lng, lat)
-          this.isMoveEnd = true
+          this.circleMarker.setPosition(lat, lng)
         }
         else {
-          if (this.isMoveEnd){
-            this.circleMarker.stopMove()
-            let speed = this._getSpeed()
-            let targetPos = this.moveAlongArray[0]
-            if (targetPos && speed > 0){
-              this.circleMarker.moveTo(targetPos.lng, targetPos.lat, speed)
-              this.isMoveEnd = false
-            }
-          }
+          // 修复：在动画模式下也要更新circleMarker位置
+          console.log('PlayerTrack _updateCircleMarker 动画模式', lng, lat)
+          this.circleMarker.setPosition(lat, lng)
         }
       }
     }
@@ -445,64 +419,54 @@ export default class PlayerTrack extends BaseTrack {
       let config = {
         ...OverlayConfig.CircleMarker,
         color: this.color,
-        position: new window.AMap.LngLat(lng, lat),
+        position: new window.L.latLng(lat, lng),
         defaultIconSize: this.defaultIconSize
       }
-      this.circleMarker = new MapCircleMarker(this.aMap, config, this.sn)
-      this.circleMarkerSize && this.circleMarker.setCircleMarkerSize(this.circleMarkerSize)
-      this.data.fadeOpacit && this.circleMarker.setOpacity(this.data.fadeOpacit)
-      this.circleMarker.setContent()
-      this.circleMarker.setOffset()
-      this.circleMarker.stopMove()
+      this.circleMarker = new MapCircleMarker(this.mapboxgl, config, this.sn)
+      this.circleMarker.setContent({ size: this.circleMarkerSize })
       this.markerCursor && this.circleMarker.setCursor(this.markerCursor)
-      window.AMap.event.addListener(
-        this.circleMarker.getRoot(), 'click', ()=>this._onClickMarker(this.circleMarker))
-      window.AMap.event.addListener(
-        this.circleMarker.getRoot(), 'moving', (e)=>this.onMarkerMoving(e))
-      window.AMap.event.addListener(
-        this.circleMarker.getRoot(), 'moveend', (e)=>this.onMarkerMoveend(e))
+      this.circleMarker.click(()=>this._onClickMarker(this.circleMarker))
     }
   }
   _updateIconMarker(lng, lat, isJump = false){
     if(this.iconMarker){
       if(this.isDataUpdate){
         if (isJump){
-          this.iconMarker.stopMove()
-          this.iconMarker.setPosition(lng, lat)
-          this.isMoveEnd = true
+          this.iconMarker.setPosition(lat, lng)
         }
         else {
-          if (this.isMoveEnd){
-            this.iconMarker.stopMove()
-            let speed = this._getSpeed()
-            let targetPos = this.moveAlongArray[0]
-            if (targetPos && speed > 0){
-              this.iconMarker.moveTo(targetPos.lng, targetPos.lat, speed)
-              this.isMoveEnd = false
-            }
-          }
+          // 修复：在动画模式下也要更新iconMarker位置
+          console.log('PlayerTrack _updateIconMarker 动画模式', lng, lat)
+          this.iconMarker.setPosition(lat, lng)
         }
       }
     }
     else{
       let config = {
         ...OverlayConfig.CircleMarkerIcon,
-        position: new window.AMap.LngLat(lng, lat),
+        position: new window.L.latLng(lat, lng),
         defaultIconSize: this.defaultIconSize
       }
-      this.iconMarker = new MapMarkerIcon(this.aMap, this.data.image, config, 'web')
-      this.iconMarkerSize && this.iconMarker.setIconSize(this.iconMarkerSize)
-      this.data.fadeOpacit && this.iconMarker.setOpacity(this.data.fadeOpacit)
-      this.iconMarker.setContent()
-      this.iconMarker.setOffset()
-      this.iconMarker.stopMove()
+      this.iconMarker = new MapMarkerIcon(this.mapboxgl, this.data.image, config, this.sn, 'web')
+      this.iconMarker.setContent({ size: this.iconMarkerSize })
       this.markerCursor && this.iconMarker.setCursor(this.markerCursor)
-      window.AMap.event.addListener(
-        this.iconMarker.getRoot(), 'click', ()=>this._onClickMarker(this.iconMarker))
-      window.AMap.event.addListener(
-        this.iconMarker.getRoot(), 'moving', (e)=>this.onMarkerMoving(e))
-      window.AMap.event.addListener(
-        this.iconMarker.getRoot(), 'moveend', (e)=>this.onMarkerMoveend(e))
+      this.iconMarker.click(()=>this._onClickMarker(this.iconMarker))
+    }
+  }
+  /**
+   * 更新动画标记 - 修复：确保标记跟随动画移动
+   */
+  _updateAnimationMarker(lng, lat){
+    console.log('_updateAnimationMarker调用', lng, lat)
+    // 更新circleMarker位置 - 这是关键，确保circleMarker跟随text移动
+    if (this.circleMarker) {
+      this.circleMarker.setPosition(lat, lng)
+      console.log('更新circleMarker位置', lat, lng)
+    }
+    // 更新iconMarker位置
+    if (this.iconMarker) {
+      this.iconMarker.setPosition(lat, lng)
+      console.log('更新iconMarker位置', lat, lng)
     }
   }
   /**
@@ -516,7 +480,6 @@ export default class PlayerTrack extends BaseTrack {
     this.endMarker = null
     this.position = {lng: 0, lat: 0, locationTime: 0}  //坐标
     this.historysCount = 0  //轨迹长度
-    this.moveAlongArray = [] //待移动轨迹
     this.moveAlongPolyline = [] //待移动轨迹数据
     this.moveEndPolylineData = [] //移动结束的轨迹，用来更新轨迹用
     this.polylinePath = [] //当前轨迹渲染数据
@@ -530,20 +493,18 @@ export default class PlayerTrack extends BaseTrack {
    */
   _destroyUI(){
     if (this.circleMarker){
-      this.circleMarker.stopMove()
-      this.aMap.remove(this.circleMarker.getRoot())
+      this.circleMarker.remove()
     }
     if (this.iconMarker){
-      this.iconMarker.stopMove()
-      this.aMap.remove(this.iconMarker.getRoot())
-    }
-    if (this.text){
-      this.text.stopMove()
-      this.aMap.remove(this.text.getRoot())
+      this.iconMarker.remove()
     }
     if (this.endMarker){
       this.endMarker.stopMove()
-      this.aMap.remove(this.endMarker.getRoot())
+      this.endMarker.remove()
+    }
+    if (this.text){
+      this.text.stopMove()
+      this.text.remove()
     }
     this._destroyPolyline()
   }

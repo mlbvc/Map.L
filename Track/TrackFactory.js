@@ -13,20 +13,20 @@ export default class TrackFactory{
   /**
    * 创建轨迹对象
    * @param  {[TrackType]} type [轨迹类型]
-   * @param  {[AMap]} aMap      [地图对象]
+   * @param  {[mapboxgl]} mapboxgl      [地图对象]
    * @param  {[Object]} data    [轨迹数据]
    * @return {[BaseTrack]}      [轨迹对象]
    */
-  create(type = TrackType.PLAYER, aMap, data){
+  create(type = TrackType.PLAYER, mapboxgl, data, animationLogic){
     switch (type) {
       case TrackType.PLAYER:
-        return new PlayerTrack(aMap, data)
+        return new PlayerTrack(mapboxgl, data, animationLogic)
       case TrackType.WORKER:
-        return new WorkerTrack(aMap, data)
+        return new WorkerTrack(mapboxgl, data, animationLogic)
       case TrackType.DEVICELIVE:
-        return new DeviceLiveTrack(aMap, data)
+        return new DeviceLiveTrack(mapboxgl, data, animationLogic)
       case TrackType.DEVICEHISTORY:
-        return new DeviceHistoryTrack(aMap, data)
+        return new DeviceHistoryTrack(mapboxgl, data, animationLogic)
       default:
     }
   }

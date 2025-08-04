@@ -1,4 +1,3 @@
-
 import MapMarkerIcon from './Overlay/MapMarkerIcon'
 import MapText from './Overlay/MapText'
 import OverlayConfig from './OverlayConfig'
@@ -36,19 +35,19 @@ export default class AlarmOverlayLogic{
     this.removeOverlayList = {}
     this.isShow = false //是否显示报警图标
     this.overlayLogicObj = overlayLogicObj
-    this.aMap = null
+    this.mapboxgl = null
     this.defaultIconSize = 20 //默认报警图标大小
     this.curIconSize = this.defaultIconSize //报警图标大小
     this.overspeedAlarmList = {} //超速报警列表
   }
   /**
    * 更新警报
-   * @param  {[AMap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    * @param  {[Array]} data [警报数据]
    * @param  {[Number]} iconType [报警图标是否跟随运动员]
    */
-  updateAlarm(aMap, data, icon_type = AlarmIconType.FOLLOW){
-    this.aMap = aMap
+  updateAlarm(mapboxgl, data, icon_type = AlarmIconType.FOLLOW){
+    this.mapboxgl = mapboxgl
     this.iconType = icon_type
     for (let i = 0; i < data.length; ++i){
       let item = data[i]
@@ -64,11 +63,11 @@ export default class AlarmOverlayLogic{
   }
   /**
    * 设置警报
-   * @param  {[AMap]} aMap [地图对象]
+   * @param  {[mapboxgl]} mapboxgl [地图对象]
    * @param  {[Array]} data [警报数据]
    * @param  {[Number]} iconType [报警图标是否跟随运动员]
    */
-  setAlarm(aMap, data, icon_type = AlarmIconType.FOLLOW){
+  setAlarm(mapboxgl, data, icon_type = AlarmIconType.FOLLOW){
     let deleteList = []
     for (let key in this.overlayList){
       let isFind = false
@@ -90,7 +89,7 @@ export default class AlarmOverlayLogic{
       let item = this.overlayList[key]
       this.removeAlarmItem(item)
     }
-    this.updateAlarm(aMap, data, icon_type)
+    this.updateAlarm(mapboxgl, data, icon_type)
   }
   /**
    * 更新所有警报坐标
@@ -129,22 +128,18 @@ export default class AlarmOverlayLogic{
     let iconUIObj = item.iconUIObj
     let textUIObj = item.textUIObj
     if(this.iconType === AlarmIconType.FOLLOW){
-      iconUIObj && this.aMap.remove(iconUIObj.getRoot()) // 删除警报UI图标
+      iconUIObj && iconUIObj.remove() // 删除警报UI图标
     }
     else if(this.iconType === AlarmIconType.STATIC){
       if(iconUIObj){
-        let removeUIObj = []
         for (let i = 0; i < iconUIObj.length; i++) {
-          iconUIObj[i] && removeUIObj.push(iconUIObj[i].getRoot())
+          iconUIObj[i] && iconUIObj[i].remove() // 删除警报UI图标
         }
-        this.aMap.remove(removeUIObj) // 删除警报UI图标
       }
       if(textUIObj){
-        let removeUIObj = []
         for (let i = 0; i < textUIObj.length; i++) {
-          textUIObj[i] && removeUIObj.push(textUIObj[i].getRoot())
+          textUIObj[i] && textUIObj[i].remove()
         }
-        this.aMap.remove(removeUIObj) // 删除报警UI文本
       }
     }
     let data = item.data
@@ -202,6 +197,7 @@ export default class AlarmOverlayLogic{
    * 报警图片点击回调
    */
   onClickMarker(key){
+    console.log(key)
     let item = this.overlayList[key]
     let data = item.data
     let info = data.info
@@ -230,27 +226,23 @@ export default class AlarmOverlayLogic{
     }
     if(this.iconType === AlarmIconType.FOLLOW){
       if(this.overlayList[player_id].iconUIObj){
-        this.aMap.remove(this.overlayList[player_id].iconUIObj.getRoot())
+        this.overlayList[player_id].iconUIObj.remove()
         delete this.overlayList[player_id].iconUIObj
       }
     }
     else if(this.iconType === AlarmIconType.STATIC){
       if(this.overlayList[player_id].iconUIObj){
-        let deleteUIObj = []
         for (let i = 0; i < this.overlayList[player_id].iconUIObj.length; i++) {
           let item = this.overlayList[player_id].iconUIObj[i]
-          item && deleteUIObj.push(item.getRoot())
+          item && item.remove()
         }
-        this.aMap.remove(deleteUIObj)
         delete this.overlayList[player_id].iconUIObj
       }
       if(this.overlayList[player_id].textUIObj){
-        let deleteUIObj = []
         for (let  i = 0; i < this.overlayList[player_id].textUIObj.length; i++) {
           let item = this.overlayList[player_id].textUIObj[i]
-          item && deleteUIObj.push(item.getRoot())
+          item && item.remove()
         }
-        this.aMap.remove(deleteUIObj)
         delete this.overlayList[player_id].textUIObj
       }
     }
@@ -281,9 +273,7 @@ export default class AlarmOverlayLogic{
         let item = this.overlayList[key]
         let iconUIObj = item.iconUIObj
         if(item.data.info.is_worker === 0 && iconUIObj && this.iconType === AlarmIconType.FOLLOW){
-          iconUIObj.setIconSize(this.curIconSize)
-          iconUIObj.setContent()
-          iconUIObj.setOffset()
+          iconUIObj.setContent({ size: this.curIconSize })
         }
       }
     }
@@ -359,7 +349,7 @@ export default class AlarmOverlayLogic{
     let data = item.data
     let info = data.info
     let state = data.state
-    // let sn = info.sn
+    let sn = info.sn
     let player_id = info.id
     let trackType = info.is_worker === 1 ? TrackType.WORKER : TrackType.PLAYER
     let iconSize = info.is_worker === 1 ? this.defaultIconSize : this.curIconSize
@@ -371,12 +361,11 @@ export default class AlarmOverlayLogic{
     if (iconUIObj){
       //更新 UI对象坐标
       if(this.overlayLogicObj.getTrackIsMoveEnd(trackType, player_id) && isJump){
-        iconUIObj.setPosition(position.lng, position.lat)
+        iconUIObj.setPosition(position.lat, position.lng)
       }
       if(iconUIObj.getIsHide()){
         item.iconUIObj.show()
       }
-      iconUIObj.setOffset()
       iconUIObj.setzIndex(zIndex)
       this.overlayLogicObj.setDeviceTextzIndex(trackType, player_id, zIndex)
       this.overlayLogicObj.setDeviceAlarmType(trackType, player_id, state)
@@ -384,27 +373,25 @@ export default class AlarmOverlayLogic{
       if(markerIcon){
         iconUIObj.updateMarkerIcon(markerIcon)
       }else{
-        this.aMap.remove(iconUIObj.getRoot())
+        iconUIObj.remove()
       }
     }
     else {
       let config = {
         ...OverlayConfig.CircleMarkerIcon,
-        position : new window.AMap.LngLat(position.lng, position.lat),
+        position : new window.L.latLng(position.lat, position.lng),
         zIndex : zIndex
       }
       let markerIcon = this._getMarkerIconImage(state)
       if(markerIcon){
-        item.iconUIObj = new MapMarkerIcon(this.aMap, markerIcon, config)
-        item.iconUIObj.setIconSize(iconSize)
-        item.iconUIObj.setContent()
-        item.iconUIObj.setOffset()
+        item.iconUIObj = new MapMarkerIcon(this.mapboxgl, markerIcon, config, 'follow_alarm_icon' + sn)
+        item.iconUIObj.setContent({ size: iconSize })
         item.iconUIObj.hide()
         this.overlayList[player_id].iconUIObj = item.iconUIObj
         this.overlayLogicObj.setDeviceTextzIndex(trackType, player_id, zIndex)
         this.overlayLogicObj.setDeviceAlarmType(trackType, player_id, state)
-        window.AMap.event.addListener(
-          item.iconUIObj.getRoot(), 'click', ()=>this.onClickMarker(key))
+        // item.iconUIObj.click(()=>this.onClickMarker(key))
+        item.iconUIObj.on('click', ()=>this.onClickMarker(key))
       }
     }
   }
@@ -419,7 +406,7 @@ export default class AlarmOverlayLogic{
       let staticItem = staticData[i]
       let alarm = staticItem.alarm
       let info = staticItem.info
-      let sn = info.sn
+      // let sn = info.sn
       let player_id = info.id
       let trackType = info.is_worker === 1 ? TrackType.WORKER : TrackType.PLAYER
       let iconSize = info.is_worker === 1 ? this.defaultIconSize : this.curIconSize
@@ -447,17 +434,15 @@ export default class AlarmOverlayLogic{
               continue
             }
             let zIndex = OverlayConfig.markerIconzIndex[key]
-            position = new window.AMap.LngLat(position.lng, position.lat)
+            position = new window.L.latLng(position.lat, position.lng)
             let iconConfig = {
               ...OverlayConfig.CircleMarkerIcon,
               zIndex : zIndex,
               position : position
             }
             item.iconUIObj = item.iconUIObj || []
-            item.iconUIObj[i] = new MapMarkerIcon(this.aMap, markerIcon, iconConfig)
-            item.iconUIObj[i].setIconSize(iconSize)
-            item.iconUIObj[i].setContent()
-            item.iconUIObj[i].setOffset()
+            item.iconUIObj[i] = new MapMarkerIcon(this.mapboxgl, markerIcon, iconConfig, 'static_alarm_icon' + i)
+            item.iconUIObj[i].setContent({ size: iconSize })
             this.overlayList[player_id].iconUIObj[i] = item.iconUIObj[i]
             //超速报警显示速度
             if(Number(key) === AlarmType.OVERSPEED){
@@ -467,9 +452,9 @@ export default class AlarmOverlayLogic{
                 color: this.overlayLogicObj.getDeviceColor(trackType, player_id)
               }
               item.textUIObj = item.textUIObj || []
-              item.textUIObj[i] = new MapText(this.aMap, textConfig, sn)
-              item.textUIObj[i].setText(info.speed + 'km/h')
-              item.textUIObj[i].setOffsetInTextLength(info.speed + 'km/h')
+              item.textUIObj[i] = new MapText(this.mapboxgl, textConfig, 'static_alarm_text' + i)
+              item.textUIObj[i].setContent({ text: info.speed + 'km/h' })
+              item.textUIObj[i].setOffset()
             }
             else{
               item.textUIObj = item.textUIObj || []

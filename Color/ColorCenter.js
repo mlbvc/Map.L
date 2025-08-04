@@ -1,4 +1,3 @@
-
 import OverlayConfig from '../OverlayConfig'
 export default class ColorCenter{
   static getInstance(){

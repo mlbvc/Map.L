@@ -20,6 +20,9 @@ export default class WorkerTrack extends BaseTrack {
     this.zIndex = OverlayConfig.WorkerTrack.zIndex
     this.trackMemoryTime = SetUpDefaultConfig[this.pageName].workerTracklngValue * 60 * 1000 || OverlayConfig.TrackMemoryTime //显示轨迹时间
     this.isShowAllHistorys = SetUpDefaultConfig[this.pageName].workerIsShoAllTrack //是否显示全部轨迹
+    broadcastCenter.addEventListener(
+      'updateWorkerNameText',
+      this._updateTrackNameText.bind(this))
   }
   /**
    * 根据设置参数更新工作人员UI
@@ -48,8 +51,7 @@ export default class WorkerTrack extends BaseTrack {
       if(state){
         text = this.data.name + " " + this.curSpeed + "km/h"
       }
-      this.text.setText(text)
-      this.text.setOffsetInTextLength(text)
+      this.text.setContent({ text: text })
     }
   }
   /**
@@ -73,7 +75,7 @@ export default class WorkerTrack extends BaseTrack {
    */
   _updateSeverData(oldData){
     if(oldData.name !== this.data.name){
-      this._updateTrackNameText()
+      broadcastCenter.pushEvent('updateWorkerNameText')
     }
   }
   /**
@@ -81,8 +83,7 @@ export default class WorkerTrack extends BaseTrack {
    */
   _updateTrackNameText(){
     if(this.text){
-      this.text.setText(this.data.name)
-      this.text.setOffsetInTextLength(this.data.name)
+      this.text.setContent({ text: this.data.name })
     }
   }
   /**
@@ -90,7 +91,6 @@ export default class WorkerTrack extends BaseTrack {
    */
   _stopMove(){
     this.text && this.text.stopMove()
-    this.markerIcon && this.markerIcon.stopMove()
     this.endMarker && this.endMarker.stopMove()
   }
   /**
@@ -128,7 +128,6 @@ export default class WorkerTrack extends BaseTrack {
    */
   _updateMarkerIcon(isJump = false){
     if(!this._checkPosition()){
-      this.markerIcon && this.markerIcon.stopMove()
       console.warn('WorkerTrack-_updateMarkerIcon, 参数错误')
       return
     }
@@ -137,41 +136,21 @@ export default class WorkerTrack extends BaseTrack {
     if(this.markerIcon){
       if(this.isDataUpdate){
         if (isJump){
-          this.markerIcon.stopMove()
-          this.markerIcon.setPosition(lng, lat)
-          this.isMoveEnd = true
-        }
-        else {
-          if (this.isMoveEnd){
-            this.markerIcon.stopMove()
-            let speed = this._getSpeed()
-            let targetPos = this.moveAlongArray[0]
-            if (targetPos && speed > 0){
-              this.markerIcon.moveTo(targetPos.lng, targetPos.lat, speed)
-              this.isMoveEnd = false
-            }
-          }
+          this.markerIcon.setPosition(lat, lng)
         }
       }
     }
     else{
       let config = {
         ...OverlayConfig.CircleMarkerIcon,
-        position: new window.AMap.LngLat(lng, lat),
+        position: new window.L.latLng(lat, lng),
         zIndex: this.zIndex,
         defaultIconSize: this.defaultIconSize
       }
-      this.markerIcon = new MapMarkerIcon(this.aMap, 'WORK_ICON', config, 'location')
+      this.markerIcon = new MapMarkerIcon(this.mapboxgl, 'WORK_ICON', config, this.sn, 'location')
       this.markerIcon.setContent()
-      this.markerIcon.setOffset()
-      this.markerIcon.stopMove()
       this.markerCursor && this.markerIcon.setCursor(this.markerCursor)
-      window.AMap.event.addListener(
-        this.markerIcon.getRoot(), 'click', ()=>this._onClickMarker(this.markerIcon))
-      window.AMap.event.addListener(
-        this.markerIcon.getRoot(), 'moving', (e)=>this.onMarkerMoving(e))
-      window.AMap.event.addListener(
-        this.markerIcon.getRoot(), 'moveend', (e)=>this.onMarkerMoveend(e))
+      this.markerIcon.click(()=>this._onClickMarker(this.markerIcon))
     }
   }
   /**
@@ -190,16 +169,17 @@ export default class WorkerTrack extends BaseTrack {
       if(this.isDataUpdate){
         if (isJump){
           this.text.stopMove()
-          this.text.setPosition(lng, lat)
+          this.text.setPosition(lat, lng)
           this.isMoveEnd = true
         }
         else {
           if (this.isMoveEnd){
             this.text.stopMove()
-            let speed = this._getSpeed()
-            let targetPos = this.moveAlongArray[0]
-            if (targetPos && speed > 0){
-              this.text.moveTo(targetPos.lng, targetPos.lat, speed)
+            let duration = this._getDuration()
+            let targetPos = this.moveAlongPolyline[0]
+            if (targetPos && duration > 0){
+              this.animationLogic.addMoveToAnimation(this.sn, this.text, targetPos, duration)
+              this.isMoveEnd = false
             }
           }
         }
@@ -211,17 +191,24 @@ export default class WorkerTrack extends BaseTrack {
     else {
       let config = {
         ...OverlayConfig.TextString,
-        position: new window.AMap.LngLat(lng, lat),
+        position: new window.L.latLng(lat, lng),
         color: this.color,
       }
-      this.text = new MapText(this.aMap, config, this.sn)
-      this.text.setText(this.data.name)
-      this.text.setOffsetInTextLength(this.data.name)
+      this.text = new MapText(this.mapboxgl, config, this.sn)
+      this.text.setContent({ text: this.data.name })
+      this.text.setOffset()
       this.text.stopMove()
       this.markerCursor && this.text.setCursor(this.markerCursor)
-      window.AMap.event.addListener(
-        this.text.getRoot(), 'click', ()=>this._onClickMarker(this.text))
+      this.text.click(()=>this._onClickMarker(this.text))
+      this.animationLogic.addListenerMoving(this.sn, this.onMarkerMoving.bind(this))
+      this.animationLogic.addListenerMoveend(this.sn, this.onMarkerMoveend.bind(this))
     }
+  }
+  /**
+   * 更新动画标记
+   */
+  _updateAnimationMarker(lng, lat){
+    this.markerIcon && this.markerIcon.setPosition(lat, lng)
   }
   /**
    * 销毁数据
@@ -233,7 +220,6 @@ export default class WorkerTrack extends BaseTrack {
     this.endMarker = null
     this.position = {lng: 0, lat: 0, locationTime: 0}  //坐标
     this.historysCount = 0  //轨迹长度
-    this.moveAlongArray = [] //待移动轨迹
     this.moveAlongPolyline = [] //待移动轨迹数据
     this.moveEndPolylineData = [] //移动结束的轨迹，用来更新轨迹用
     this.polylinePath = [] //当前轨迹渲染数据
@@ -247,16 +233,15 @@ export default class WorkerTrack extends BaseTrack {
    */
   _destroyUI(){
     if (this.markerIcon){
-      this.markerIcon.stopMove()
-      this.aMap.remove(this.markerIcon.getRoot())
-    }
-    if (this.text){
-      this.text.stopMove()
-      this.aMap.remove(this.text.getRoot())
+      this.markerIcon.remove()
     }
     if(this.endMarker){
       this.endMarker.stopMove()
-      this.aMap.remove(this.endMarker.getRoot())
+      this.endMarker.remove()
+    }
+    if (this.text){
+      this.text.stopMove()
+      this.text.remove()
     }
     this._destroyPolyline()
   }

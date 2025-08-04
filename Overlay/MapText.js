@@ -1,14 +1,16 @@
+import Animation from './Animation'
 export default class MapText{
   /**
    * 构造方法
-   * @param {[AMap]} aMap     高德地图对象
+   * @param {[mapboxgl]} mapboxgl     高德地图对象
    * @param {[Object]} config 文本标记配置
    * @param {Number} [id=0]   文本标记ID
    */
-  constructor(aMap, config, id = 0){
-    this.aMap = aMap
+  constructor(mapboxgl, config, id = 0){
+    this.mapboxgl = mapboxgl
     this.config = config
     this.id = id
+    this.marker_id = 'text_' + id
     this._text = null
     this.textSize = 13
     this.imgWidth = 20
@@ -16,127 +18,178 @@ export default class MapText{
     this.textString = ''
     this.flag = ''
     this.isHide = false
+    this.opacity = 1
+    this.selectedTextTitle = "" // 气泡文本标记标题
+    this.selectedTextTime = ""  // 气泡文本标记定位时间
+    this.selectedTextLngLat = "" // 气泡文本标记位置
+    this.animation = new Animation()
     this.init()
   }
   /**
    * 初始化圆点标记，加入地图中
    */
   init(){
-    if (!this.aMap || !this.config){
-      console.log("初始化圆点标记失败！")
+    console.log(this.mapboxgl, this.config)
+    if (!this.mapboxgl || !this.config){
+      console.log("初始化文本标记失败！")
       return
     }
-    console.log(this.config)
-    this._text = new window.AMap.Marker(this.config)
-    this.aMap.add(this._text)
+    
+    let position = this.config.position
+    
+    // 修复：使用divIcon创建透明的文本标记，不显示默认图标
+    let customIcon = window.L.divIcon({
+      html: '', // 初始为空，后续通过setContent设置
+      className: 'custom-text-marker',
+      iconSize: [0, 0], // 初始大小为0
+      iconAnchor: [0, 0]
+    })
+    
+    this._text = new window.L.marker(position || [0, 0], {
+      icon: customIcon
+    })
+    this._text.addTo(this.mapboxgl)
   }
 
   /**
    * 设置位置
-   * @param {[type]} lng 经度
-   * @param {[type]} lat 纬度
    */
-  setPosition(lng, lat){
-    let lngLat = new window.AMap.LngLat(lng, lat)
-    this._text.setPosition(lngLat)
+  setPosition(lat, lng){
+    let lnglat = new window.L.LatLng(lat, lng)
+    this._text.setLatLng(lnglat)
+  }
+  /**
+   * Leaflet兼容方法：设置位置
+   */
+  setLatLng(latlng){
+    if (Array.isArray(latlng)) {
+      this._text.setLatLng(latlng)
+    } else {
+      this._text.setLatLng([latlng.lat, latlng.lng])
+    }
   }
   /**
    * 获取位置
-   * @return {[LngLat]} [位置]
    */
   getPosition(){
-    console.log(this._text.getPosition())
-    return this._text.getPosition()
+    return this._text.getLatLng()
   }
   /**
    * 设置移动
-   * @param {[type]} lng 经度
-   * @param {[type]} lat 纬度
-   * @param {[number]} speed 速度 km/h
    */
-  moveTo(lng, lat, speed){
-    let lngLat = new window.AMap.LngLat(lng, lat)
-    this._text.moveTo(lngLat, speed)
-  }
+   moveTo(target, duration){
+     console.log('MapText moveTo调用', target, duration)
+     this.animation.markerMoveTo(this._text, target, duration)
+   }
   /**
    * 设置移动数组
-   * @param  {[Array]} arr   [经纬度对象数组]
-   * @param {[number]} speed 速度 km/h
    */
-  moveAlong(arr, speed){
-    if (!arr || arr.length <=0){
-      return
-    }
-    this._text.moveAlong(arr, speed)
-  }
+   moveAlong(path, duration){
+     this.animation.markerMoveAlong(this._text, path, duration)
+   }
   /**
    * 停止播放动画
    */
-  stopMove(){
-    this._text.stopMove()
+   stopMove(){
+     this.animation.markerStop()
+   }
+   /**
+    * 添加两点移动结束监听回调
+    */
+   addListenerMoveend(callback){
+     this.animation.initMoveendCallback(callback)
+   }
+   /**
+    * 添加两点移动中监听回调
+    */
+   addListenerMoving(callback){
+     this.animation.initMovingCallback(callback)
+   }
+   /**
+    * 添加线段移动结束监听回调
+    */
+   addListenerMovealong(callback){
+     this.animation.initMovealongCallback(callback)
+   }
+  /**
+   * 设置文本标记点
+   */
+  setContent(data = {}){
+    this.setText(data.text)
+    this.setColor(data.color)
+    this.setFlag(data.flag)
+    this.setOpacity(data.opacity)
+    this.setSize(data.size)
+    let content = this.config.content || ""
+    this._setElement(content)
+  }
+  /**
+   * 设置气泡文本标记点
+   */
+  setSelectedContent(data = {}){
+    this.setSelectedText({
+      title: data.title || "",
+      time: data.time || "",
+      lnglat: data.lnglat || ""
+    })
+    let content = this.config.selectedContent || ""
+    this._setElement(content)
   }
   /**
    * 设置文本内容
    */
-  setText(string, config = this.config){
-    this.config.color = config.color
-    let content = this._getContent(string)
-    this._text.setContent(content)
+  setText(string){
+    if(string === undefined || string === null){
+      return
+    }
+    this.textString = string
+  }
+  /**
+   * 设置气泡文本内容
+   */
+  setSelectedText(data){
+    if (!data){
+      console.warn('MapText-setSelectedText, 参数错误')
+      return
+    }
+    this.selectedTextTitle = data.title
+    this.selectedTextTime = data.time
+    this.selectedTextLngLat = data.lnglat
+  }
+  /**
+   * 设置文本颜色
+   */
+  setColor(color){
+    if(color === undefined || color === null){
+      return
+    }
+    this.config.color = color
   }
   /**
    * 设置国旗
    */
-  setFlag(img){
-    this.flag = img
-  }
-  setSelectedText(data){
-    if (!data){
-      console.warn('setSelectedText, 参数错误')
+  setFlag(flag){
+    if(flag === undefined || flag === null){
       return
     }
-    let content = this.config.selectedContent || ""
-    content = content.replace(/content/g, data.content)
-    content = content.replace(/battery/g, data.battery)
-    content = content.replace(/locationTime/g, data.locationTime)
-    content = content.replace(/lnglat/g, data.lnglat)
-    content = content.replace(/updateTime/g, data.updateTime)
-    content = content.replace(/signal/g, data.signal)
-    content = content.replace(/sats/g, data.sats)
-    content = content.replace(/temp/g, data.temp)
-    content = content.replace(/act/g, data.act)
-    this._text.setContent(content)
+    this.flag = flag
   }
-
-  setHistorySelectedText(data){
-    if (!data){
-      console.warn('setHistorySelectedText, 参数错误')
-      return
-    }
-    let content = this.config.historySelectedContent || ""
-    content = content.replace(/content/g, data.content)
-    content = content.replace(/locationTime/g, data.locationTime)
-    content = content.replace(/lnglat/g, data.lnglat)
-    this._text.setContent(content)
-  }
-
   /**
    * 设置透明度
    */
-  setOpacity(string, opacity){
-    if (isNaN(opacity)){
-      console.warn('setOpacity, 参数错误')
+  setOpacity(opacity){
+    if(isNaN(opacity) || opacity === undefined || opacity === null){
       return
     }
-    let content = this._getContent(string)
-    content = content.replace(/opacityValue/g, opacity)
-    content = content.replace(/opacityFilter/g, opacity * 100)
-    this._text.setContent(content)
+    this.opacity = opacity
   }
   /**
    * 设置文本大小
-   * @param {[Number]} size [文本大小]
    */
-  setTextSize(size){
+  setSize(size){
+    if(isNaN(size) || size === undefined || size === null){
+      return
+    }
     this.textSize = size
     this.imgWidth = size * 3 / 2
     this.imgHeight = size
@@ -144,28 +197,49 @@ export default class MapText{
   /**
    * 设置偏移
    */
-  setOffset(x = 20, y = -30){
+  setOffset(x = 5, y = -20){
     let px = Number(x)
     let py = Number(y)
-    let pixel = new window.AMap.Pixel(px, py)
-    this._text.setOffset(pixel)
-  }
-  /**
-   * 根据运动员名字长度计算偏移量
-   * @param {[type]} string [运动员姓名]
-   */
-  setOffsetInTextLength(string){
-    let len = string.replace(/[^x00-xff]/g,"01").length
-    let width = this.textSize * ( len / 2 )
-    let value = this.flag? this.imgWidth : 6
-    let offsetX = (width / 2) + value
-    this.setOffset(offsetX)
+    let pixel = [px, py]
+    console.log('this._text', this._text)
+    this._text.setZIndexOffset(pixel)
   }
   /**
    * 设置点标记的叠加顺序
    */
   setzIndex(zIndex){
-    this._text.setzIndex(zIndex)
+    if(isNaN(zIndex) || zIndex === undefined || zIndex === null){
+      console.warn('MapText-setzIndex, 参数错误')
+      return
+    }
+    this.config.zIndex = zIndex
+    let el = document.querySelector('#' + this.marker_id)
+    if(el){
+      el.style.zIndex = zIndex
+    }
+  }
+  /**
+   * 设置旋转角度
+   */
+  setAngle(number){
+    if(isNaN(number) || number === undefined || number === null){
+      console.warn('MapText-setAngle, 参数错误')
+      return
+    }
+    this._text.setRotation(number)
+  }
+  /**
+   * 设置鼠标样式
+   */
+  setCursor(cursor){
+    if(!cursor){
+      console.warn('MapText-setCursor, 参数错误')
+      return
+    }
+    let el = document.querySelector('#' + this.marker_id)
+    if(el){
+      el.style.cursor = cursor
+    }
   }
   /**
    * 设置报警类型
@@ -190,24 +264,7 @@ export default class MapText{
    * 获取旋转角度
    */
   getAngle(){
-    return this._text.getAngle()
-  }
-  /**
-   * 设置旋转角度
-   */
-  setAngle(number){
-    if(isNaN(number)){
-      console.warn('setAngle, 参数错误')
-      return
-    }
-    this._text.setAngle(number)
-  }
-  /**
-   * 设置鼠标样式
-   * @param {[string]} cursor [鼠标样式]
-   */
-  setCursor(cursor){
-    this._text.setCursor(cursor)
+    return this._text.getRotation()
   }
   /**
    * 获取显示文本
@@ -216,8 +273,13 @@ export default class MapText{
     return this.textString
   }
   /**
+   * 获取是否隐藏标记点
+   */
+  getIsHide(){
+    return this.isHide
+  }
+  /**
    * 获取文本对象
-   * @return {[Text]} [文本]
    */
   getRoot(){
     return this._text
@@ -227,38 +289,60 @@ export default class MapText{
    */
   show(){
     this.isHide = false
-    this._text.show()
+    let el = document.querySelector('#' + this.marker_id)
+    if(el){
+      el.style.display = ""
+    }
   }
   /**
    * 隐藏文本
    */
   hide(){
     this.isHide = true
-    this._text.hide()
-  }
-  /**
-   * 获取是否隐藏标记点
-   */
-  getIsHide(){
-    return this.isHide
-  }
-  /**
-   * 获取地图标记使用的配置
-   * @return {[type]} [description]
-   */
-  _getContent(text){
-    if (!text){
-      console.warn('_getContent, 参数错误')
-      return
+    let el = document.querySelector('#' + this.marker_id)
+    if(el){
+      el.style.display = "none"
     }
-    this.textString = text
-    let color = this.config.color || '#000'
-    let content = this.config.content || ""
+  }
+  /**
+   * 给文本标记添加点击事件
+   */
+  click(callback){
+    let el = document.querySelector('#' + this.marker_id)
+    if(el){
+      el.onclick = callback
+    }
+  }
+  /**
+   * 移除文本标记
+   */
+  remove(){
+    // let el = document.querySelector('#' + this.marker_id)
+    // if(el){
+    //   el.parentNode.removeChild(el)
+    // }
+    this._text.remove(this.mapboxgl)
+  }
+  /**
+   * 设置文本Html内容
+   */
+  _setElement(content){
+    let el = document.querySelector('#' + this.marker_id)
+
+    let text = this.textString || ''
     let textSize = this.textSize || 13
+    let color = this.config.color || '#000'
     let flag = this.flag || ''
+    let isShowFlag = this.flag? 'inline-block' : 'none'
     let imgWidth = this.imgWidth || 20
     let imgHeight = this.imgHeight || 13
-    let isShowFlag = this.flag? 'inline-block' : 'none'
+
+    let title = this.selectedTextTitle || ''
+    let time = this.selectedTextTime || ''
+    let lnglat = this.selectedTextLngLat || ''
+
+    let opacity = this.options
+
     content = content.replace(/content/g, text)
     content = content.replace(/textSize/g, textSize)
     content = content.replace(/textcolor/g, color)
@@ -266,6 +350,16 @@ export default class MapText{
     content = content.replace(/isShow/g, isShowFlag)
     content = content.replace(/imgWidth/g, imgWidth)
     content = content.replace(/imgHeight/g, imgHeight)
-    return content
+
+    content = content.replace(/selectedTitle/g, title)
+    content = content.replace(/selectedTime/g, time)
+    content = content.replace(/selectedLngLat/g, lnglat)
+
+    content = content.replace(/opacityValue/g, opacity)
+    content = content.replace(/opacityFilter/g, opacity * 100)
+
+    if(el){
+      el.innerHTML = content
+    }
   }
 }

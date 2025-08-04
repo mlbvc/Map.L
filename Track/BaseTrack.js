@@ -4,17 +4,19 @@ import OverlayConfig from '../OverlayConfig'
 import SetUpDefaultConfig from '../../../Component/SetUp/SetUpDefaultConfig'
 import BroadcastCenter from '../../../Framework/Broadcast/BroadcastCenter'
 import Util from '../../../Common/Utils/Util'
+import * as turf from '@turf/turf'
+
 const broadcastCenter = BroadcastCenter.getInstance()
 const util = Util.getInstance()
 export default class BaseTrack{
   /**
    *  构造函数
-   * @param {[AMap]} aMap [地图对象]
+   * @param {[mapboxgl]} mapboxgl [地图对象]
    * @param {[Object]} data [轨迹数据]
    */
-  constructor(aMap, data){
+  constructor(mapboxgl, data, animationLogic){
     this.deletable = false    //删除标记
-    this.aMap = aMap          //地图对象
+    this.mapboxgl = mapboxgl          //地图对象
     this.data = data          //轨迹数据
     this.sn = data.sn         //设备号
     this.markerCursor = data.markerCursor || 'pointer' //鼠标选中样式
@@ -23,7 +25,6 @@ export default class BaseTrack{
     this.color = "#000"
     this.markMoveMutiple = 0 //播放倍率
     this.historysCount = 0  //轨迹长度
-    this.moveAlongArray = [] //待移动轨迹
     this.moveAlongPolyline = [] //待移动轨迹数据
     this.moveEndPolylineData = [] //移动结束的轨迹，用来更新轨迹用
     this.polylinePath = [] //当前轨迹渲染数据
@@ -38,6 +39,7 @@ export default class BaseTrack{
     this.isLegsState = data.isLegsState //是否是赛段模式（直播页选中赛段）
     this.curSpeed = 0
     this.isShowSpeed = false // 是否显示速度
+    this.animationLogic = animationLogic
     this._init()
     this._updateData(true)
     this._updateUI(true)
@@ -199,7 +201,7 @@ export default class BaseTrack{
     if(!this.text){
       return
     }
-    return this.text.getRoot()
+    return this.text
   }
   /**
    * 获取动画轨迹是否移动完成
@@ -248,25 +250,46 @@ export default class BaseTrack{
    * @param  {Boolean} [isJump=false] [是否使用跳点方式]
    */
   onMarkerMoving(e){
-    console.log('onMarkerMoving----------------')
+    console.log('basetrak -------onMarkerMoving----------------', e.passedPath[0])
     //更新设置报警图标位置
     broadcastCenter.pushEvent('updateAlarmPosition', {
       markerData:this.data,
       passedPath: e.passedPath
     })
+    // 修复：在移动过程中更新circleMarker位置，确保同步
+    this._updateAnimationMarker(e.passedPath[0].lng, e.passedPath[0].lat)
+    
+    // 修复：调用_updatePolyline，与MAP版本保持一致
     this._updatePolyline()
   }
   /**
    * 标记点动画节点结束回调
    */
   onMarkerMoveend(e){
+    console.log('onMarkerMoveend++++++++++++++++++++++++++++++++++', e.passedPath[0])
     let lastPolylineData = this.moveAlongPolyline[0]
     lastPolylineData && this.moveEndPolylineData.push(lastPolylineData)
     this.popPos = lastPolylineData
-    this.moveAlongArray.splice(0,1)
     this.moveAlongPolyline.splice(0,1)
     this.isMoveEnd = true
     this.isDataUpdate = true
+    // 重新启用这个关键调用！这是circleMarker跟随移动的关键
+    this._updateAnimationMarker(e.passedPath[0].lng, e.passedPath[0].lat)
+    
+    // 修复：移动结束时确保轨迹线包含最新位置
+    if (this.polyline && e.passedPath[0]) {
+      let currentPos = e.passedPath[0]
+      let currentPath = this.polyline.config.path || []
+      
+      // 确保最后一个点是当前位置
+      let lastPoint = currentPath[currentPath.length - 1]
+      if (!lastPoint || lastPoint[0] !== currentPos.lat || lastPoint[1] !== currentPos.lng) {
+        let newPath = [...currentPath, [currentPos.lat, currentPos.lng]]
+        console.log('onMarkerMoveend 确保轨迹完整', newPath.length)
+        this.polyline.setPath(newPath)
+      }
+    }
+    
     this._updateUI()
   }
   /**
@@ -278,6 +301,7 @@ export default class BaseTrack{
    * @param  {Boolean} [isJump=false] [是否使用跳点方式]
    */
   _updateData(isJump = false){
+    console.log('_updateData data', this.data)
     let data = this.data
     let historys = data.historys
     if (!historys || historys.length <= 0){
@@ -301,7 +325,6 @@ export default class BaseTrack{
       this.isMoveEnd = true
       this.isEndMarkerMoveEnd = true
       this.moveAlongPolyline = []
-      this.moveAlongArray = []
       this.moveEndPolylineData = []
       this.popPos = null
       this.lastPos = null
@@ -323,17 +346,18 @@ export default class BaseTrack{
           continue
         }
         this.moveAlongPolyline.push(historys[i])
-        let lngLat = new window.AMap.LngLat(historys[i].lng, historys[i].lat)
-        this.moveAlongArray.push(lngLat)
+        console.log('this.moveAlongPolyline',  this.moveAlongPolyline)
       }
       this.lastPos = this.moveAlongPolyline[this.moveAlongPolyline.length - 1]
     }
+    // this._getMoveSpeed()
   }
   /**
    * 更新或者初始化折线
    * @param  {Boolean} [isJump=false] [是否使用跳点方式]
    */
   _updatePolyline(isJump = false){
+    console.log('basetrak_updatePolyline___________________________________________________')
     if (!this._checkPosition()){
       console.warn('PlayerTrack-_updatePolyline, 参数错误')
       return
@@ -344,6 +368,8 @@ export default class BaseTrack{
     let targetTime = this.curTime.getTime() - this.trackMemoryTime //轨迹拖尾截断时间
     let historys = []
     let polylinePath = []
+    console.log('this.data', this.data)
+    console.log('isJump', isJump)
     if (isJump){
       this.endMarkerMoveArray = []
       this.endMarkerPopPos = null
@@ -383,25 +409,25 @@ export default class BaseTrack{
         this.polylinePath.push(polylineData)
       }
       polylinePath = this.polylinePath
-      //如有轨迹，将标记点坐标放入线段数组开头
-      if(this.polylinePath.length > 0){
-        this.text && this.polylinePath.unshift({
-          ...this.text.getPosition(),
-          locationTime: this.polylinePath[0].locationTime
-        })
-      }
+      // 注释原代码：完全避免添加当前位置，防止连线问题
+      // if(this.polylinePath.length > 0){
+      //   this.text && this.polylinePath.unshift({
+      //     ...this.text.getPosition(),
+      //     locationTime: this.polylinePath[0].locationTime
+      //   })
+      // }
     }
     else {
       if (this.polylinePath.length <= 0 && (this.trackMemoryTime || isShowAllHistorys || isLegsState)){
-        //如无线段，将标记点坐标放入线段数组开头，使第一次动画移动有线段
-        let locationTime = util.getCurrentDateStr('all', this.curTime)
-        if(!isShowAllHistorys && !isLegsState && this.jumpCutTime){
-          locationTime = this.jumpCutTime
-        }
-        this.text && this.polylinePath.unshift({
-          ...this.text.getPosition(),
-          locationTime: locationTime
-        })
+        // 注释原代码：完全避免添加当前位置，防止连线问题
+        // let locationTime = util.getCurrentDateStr('all', this.curTime)
+        // if(!isShowAllHistorys && !isLegsState && this.jumpCutTime){
+        //   locationTime = this.jumpCutTime
+        // }
+        // this.text && this.polylinePath.unshift({
+        //   ...this.text.getPosition(),
+        //   locationTime: locationTime
+        // })
       }
       //将动画移动的数据放入线段数组
       if (this.moveEndPolylineData.length > 0){
@@ -412,6 +438,22 @@ export default class BaseTrack{
       }
       this.moveEndPolylineData = []
       polylinePath = []
+      
+      // 添加完整的历史轨迹数据到polylinePath
+      historys = data.historys || []
+      for (let i = 0; i < historys.length; ++i){
+        let polylineData = historys[i]
+        if(polylineData.locationTime){
+          let curTime = util.newDate(polylineData.locationTime)
+          let cutLimit = data.limitDateTime && (data.limitDateTime > curTime.getTime()) //是否截断限制时间前的轨迹
+          if ((!isLegsState && !isShowAllHistorys && (targetTime > curTime.getTime())) || cutLimit){
+            //如果超出轨迹时间范围，退出循环
+            break
+          }
+        }
+        polylinePath.push(polylineData)
+      }
+      
       //将最终的线段数组放入用于显示线段的数组中
       for (let i = 0; i < this.polylinePath.length; ++i){
         let polylineData = this.polylinePath[i]
@@ -423,7 +465,15 @@ export default class BaseTrack{
             break
           }
         }
-        polylinePath.push(polylineData)
+        // 避免重复添加相同的点
+        let isDuplicate = polylinePath.some(p => 
+          p.lng === polylineData.lng && 
+          p.lat === polylineData.lat && 
+          p.locationTime === polylineData.locationTime
+        )
+        if (!isDuplicate) {
+          polylinePath.push(polylineData)
+        }
       }
       //若显示线段数组为空，放入一个最新点
       if(polylinePath.length <= 0){
@@ -432,9 +482,11 @@ export default class BaseTrack{
     }
     let polylinePathData = []
     let lastPathData = {}
-    if(this.text && polylinePath.length > 0){
-      polylinePathData.push(this.text.getPosition())
-    }
+    // 修复：完全不添加当前位置，避免连线问题
+    // 连线问题的根源就是添加了当前位置，导致轨迹线连接到不连续的点
+    // if(this.text && polylinePath.length > 0){
+    //   polylinePathData.push([this.text.getPosition().lat, this.text.getPosition().lng])
+    // }
     for (let i = 0; i < polylinePath.length; ++i){
       let polylineData = polylinePath[i]
       //标记定位时间异常点
@@ -451,7 +503,7 @@ export default class BaseTrack{
         break
       }
       lastPathData = polylineData
-      polylinePathData.push(new window.AMap.LngLat(polylineData.lng, polylineData.lat))
+      polylinePathData.push([polylineData.lat, polylineData.lng])
     }
     if(polylinePathData.length > 1){
       if(!isLegsState && (!isShowAllHistorys || this.trackMemoryTime > 0)){
@@ -468,13 +520,15 @@ export default class BaseTrack{
         //连接折线最后标记点坐标
         if(this.endMarker){
           if(!isJump){
-            for (let i = this.endMarkerMoveArray.length - 1; i >= 0; --i) {
-              let item = this.endMarkerMoveArray[i]
-              if(util.dateComparison(item.locationTime, lastPathData.locationTime) === -1){
-                polylinePathData.push(new window.AMap.LngLat(item.lng, item.lat))
-              }
-            }
-            polylinePathData.push(this.endMarker.getPosition())
+            // 修复：完全不添加endMarker位置，避免连线问题
+            // 连线问题的根源就是添加了当前标记位置
+            // for (let i = this.endMarkerMoveArray.length - 1; i >= 0; --i) {
+            //   let item = this.endMarkerMoveArray[i]
+            //   if(util.dateComparison(item.locationTime, lastPathData.locationTime) === -1){
+            //     polylinePathData.push([item.lat, item.lng])
+            //   }
+            // }
+            // polylinePathData.push([this.endMarker.getPosition().lat, this.endMarker.getPosition().lng])
           }
         }
       }
@@ -483,32 +537,42 @@ export default class BaseTrack{
       this.endMarkerMoveArray = []
       this.endMarkerPopPos = null
       this.text && this.endMarker && this.endMarker.setPosition(
-        this.text.getPosition().lng, this.text.getPosition().lat)
+        this.text.getPosition().lat, this.text.getPosition().lng)
     }
     if (!isLegsState && !isShowAllHistorys && this.trackMemoryTime <= 0){
       polylinePathData = []
       this.endMarkerMoveArray = []
     }
-    if(polylinePathData.length <= 0){
-      polylinePathData.push(this.text.getPosition()) //线段属性lineCap不是'butt'时，path属性长度不能小于1
-    }
-    console.log(polylinePathData)
+    // 修复：不添加当前位置，避免连线问题
+    // 如果没有轨迹数据，就不显示轨迹线，而不是添加当前位置
+    // if(polylinePathData.length <= 0){
+    //   polylinePathData.push([this.text.getPosition().lat, this.text.getPosition().lng])
+    // }
+    console.log('polylinePathData', polylinePathData.length, polylinePathData)
+    console.log('polylinePath', polylinePath.length, polylinePath)
+    console.log('this.data.historys', this.data.historys ? this.data.historys.length : 'null')
+    
+    // 修复：确保轨迹线正常更新
     if (this.polyline){
-      this.polyline.setPath(polylinePathData)
+      if(polylinePathData && polylinePathData.length > 0){
+        this.polyline.setPath(polylinePathData)
+      }
     }
     else {
-      let config = {
-        ...OverlayConfig.Polyline,
-        path: polylinePathData,
-        strokeColor: this.color,
+      if(polylinePathData && polylinePathData.length > 0){
+        let config = {
+          ...OverlayConfig.Polyline,
+          path: polylinePathData,
+          strokeColor: this.color,
+        }
+        if(this.polylineStrokeOpacity){
+          config.strokeOpacity = this.polylineStrokeOpacity
+        }
+        if(this.polylineStrokeWeight){
+          config.strokeWeight = this.polylineStrokeWeight
+        }
+        this.polyline = new MapPolyline(this.mapboxgl, config, this.sn)
       }
-      if(this.polylineStrokeOpacity){
-        config.strokeOpacity = this.polylineStrokeOpacity
-      }
-      if(this.polylineStrokeWeight){
-        config.strokeWeight = this.polylineStrokeWeight
-      }
-      this.polyline = new MapPolyline(this.aMap, config, this.sn)
     }
   }
   /**
@@ -523,7 +587,7 @@ export default class BaseTrack{
       this.endMarker && this.endMarker.stopMove()
       if(this.text){
         let position = this.text.getPosition()
-        this.endMarker && this.endMarker.setPosition(position.lng, position.lat)
+        this.endMarker && this.endMarker.setPosition(position.lat, position.lng)
       }
       return
     }
@@ -534,15 +598,17 @@ export default class BaseTrack{
     if(this.endMarker){
       if(isJump){
         this.endMarker.stopMove()
-        this.endMarker.setPosition(targetPos.lng, targetPos.lat)
+        this.endMarker.setPosition(targetPos.lat, targetPos.lng)
         this.isEndMarkerMoveEnd = true
       }
       else{
         if(this.isEndMarkerMoveEnd){
           this.endMarker.stopMove()
-          let speed = this._getEndMarkerSpeed()
-          if(targetPos && speed > 0){
-            this.endMarker.moveTo(targetPos.lng, targetPos.lat, speed)
+          let duration = this._getEndMarkerDuration()
+          if(targetPos && duration > 0){
+            console.log('调用addMoveToAnimation', 'this.sn + end', this.sn + 'end')
+            // this.endMarker.moveTo(targetPos.lng, targetPos.lat, speed)
+            this.animationLogic.addMoveToAnimation(this.sn + 'end', this.endMarker, targetPos, duration)
             this.isEndMarkerMoveEnd = false
           }
         }
@@ -551,12 +617,12 @@ export default class BaseTrack{
     else{
       let config = {
         ...OverlayConfig.InvisibleMarker,
-        position: new window.AMap.LngLat(targetPos.lng, targetPos.lat)
+        position: new window.L.latLng(targetPos.lat, targetPos.lng)
       }
-      this.endMarker = new MapCircleMarker(this.aMap, config, this.sn)
+      this.endMarker = new MapCircleMarker(this.mapboxgl, config, this.sn)
       this.endMarker.stopMove()
-      window.AMap.event.addListener(
-        this.endMarker.getRoot(), 'moveend', (e)=>this._onEndMarkerMoveend(e))
+      console.log('addListenerMoveend==============')
+      this.animationLogic.addListenerMoveend(this.sn + 'end', this._onEndMarkerMoveend.bind(this))
     }
   }
   _onEndMarkerMoveend(e){
@@ -568,11 +634,30 @@ export default class BaseTrack{
    * 更新UI
    * @param  {Boolean} [isJump=false] [是否使用跳点方式]
    */
-  _updateUI(isJump = false){}
+  _updateUI(isJump = false){
+    console.log('basetrak_updateUI---------------')
+  }
   /**
    * 更新UI颜色
    */
   _updateUIColor(){}
+  /**
+   * 更新动画标记 - 实现：让所有标记跟随text移动
+   */
+  _updateAnimationMarker(lng, lat){
+    console.log('BaseTrack _updateAnimationMarker调用', lng, lat)
+    // 调用子类的具体实现
+    if (this._updateCircleMarker) {
+      this._updateCircleMarker(lng, lat, false) // false表示非跳点模式
+    }
+    if (this._updateIconMarker) {
+      this._updateIconMarker(lng, lat, false)
+    }
+    if (this._updateMapText) {
+      // text已经通过动画移动了，不需要再次设置位置
+      // this._updateMapText(lng, lat, false)
+    }
+  }
   /**
    * 销毁数据
    */
@@ -582,7 +667,6 @@ export default class BaseTrack{
     this.endMarker = null
     this.position = {lng: 0, lat: 0, locationTime: 0}  //坐标
     this.historysCount = 0  //轨迹长度
-    this.moveAlongArray = [] //待移动轨迹
     this.moveAlongPolyline = [] //待移动轨迹数据
     this.moveEndPolylineData = [] //移动结束的轨迹，用来更新轨迹用
     this.polylinePath = [] //当前轨迹渲染数据
@@ -599,7 +683,7 @@ export default class BaseTrack{
    * 销毁折线UI
    */
   _destroyPolyline(){
-    this.polyline && this.aMap.remove(this.polyline.getRoot())
+    this.polyline && this.polyline.remove()
   }
   /**
    * 检查坐标
@@ -615,58 +699,41 @@ export default class BaseTrack{
     return true
   }
   /**
-   * 获取计算轨迹速度
+   *  获取两点移动时间
    */
-  _getSpeed(){
-    let retSpeed = 0
-    let speed = 10
-    let markMoveMutiple = this.markMoveMutiple || 1
+  _getDuration(){
+    console.log('_getDuration')
+    // let markMoveMutiple = this.markMoveMutiple || 1
+    let duration = 0
     if (this.moveAlongPolyline.length > 0){
       let curPos = this.popPos || this.moveAlongPolyline[0]
       let targetPos = this.moveAlongPolyline[0]
       if (!targetPos){
-        this.curSpeed = 0
         return 0
       }
-      let distance = window.AMap.GeometryUtil.distance(
-        new window.AMap.LngLat(targetPos.lng, targetPos.lat),
-        new window.AMap.LngLat(curPos.lng, curPos.lat)
-      )
-      if (distance <= 0.2){
+      duration = util.newDate(targetPos.locationTime).getTime() - util.newDate(curPos.locationTime).getTime()
+      duration = Math.abs(duration / 1000)
+      if(duration > 90){
+        duration = 10
+      }
+      if(duration === 0){
         this.popPos = this.moveAlongPolyline[0]
-        this.moveAlongArray.splice(0,1)
         this.moveAlongPolyline.splice(0,1)
         this.isMoveEnd = true
         this.isDataUpdate = true
         this._updateUI()
-        this.curSpeed = 0
         return 0
       }
-      let time = util.newDate(targetPos.locationTime).getTime() - util.newDate(curPos.locationTime).getTime()
-      time = Math.abs(time / 1000)
-      if(time > 90){
-        time = 10
-      }
-      speed = Number((distance / time) * (60 * 60 / 1000))
-      this.curSpeed = speed.toFixed(2)
-      if (time <= 0 || speed <= 0){
-        speed = 10
-      }
     }
-    let addSpeed = 0
-    if(this.moveAlongPolyline.length > 10){
-      addSpeed = this.moveAlongPolyline.length * 1 * markMoveMutiple
-    }
-    retSpeed = speed * markMoveMutiple + addSpeed
-    return retSpeed
+    // duration = duration / markMoveMutiple
+    return duration
   }
   /**
-   * 获取计算折线最末标记点速度
+   * 获取计算折线最末标记点移动时间
    */
-  _getEndMarkerSpeed(){
-    let retSpeed = 0
-    let speed = 10
-    let markMoveMutiple = this.markMoveMutiple || 1
+  _getEndMarkerDuration(){
+    // let markMoveMutiple = this.markMoveMutiple || 1
+    let duration = 0
     if (this.endMarkerMoveArray.length > 0){
       let curPos = this.endMarkerPopPos
       let targetPos = this.endMarkerMoveArray[0]
@@ -681,24 +748,46 @@ export default class BaseTrack{
           locationTime: util.getCurrentDateStr('all', new Date(popPosTime))
         }
       }
-      let distance = window.AMap.GeometryUtil.distance(
-        new window.AMap.LngLat(targetPos.lng, targetPos.lat),
-        new window.AMap.LngLat(curPos.lng, curPos.lat)
+      duration= util.newDate(targetPos.locationTime).getTime() - util.newDate(curPos.locationTime).getTime()
+      duration = Math.abs(duration / 1000)
+    }
+
+    // duration = duration / markMoveMutiple
+    return duration
+  }
+  /**
+   * 获取计算轨迹速度
+   */
+  _getMoveSpeed(){
+    let speed = 0
+    if (this.moveAlongPolyline.length > 0){
+      let curPos = this.popPos || this.moveAlongPolyline[0]
+      let targetPos = this.moveAlongPolyline[0]
+      if (!targetPos){
+        this.curSpeed = 0
+        return
+      }
+      // let distance = window.AMap.GeometryUtil.distance(
+      //   new window.mapboxgl.LngLat(targetPos.lng, targetPos.lat),
+      //   new window.mapboxgl.LngLat(curPos.lng, curPos.lat)
+      // )
+      let distance = turf.distance(
+        [targetPos.lng, targetPos.lat],
+        [curPos.lng, curPos.lat],
+        { units: 'meters' }
       )
       if (distance <= 0.2){
-        this._onEndMarkerMoveend()
-        return 0
+        this.curSpeed = 0
+        return
       }
       let time = util.newDate(targetPos.locationTime).getTime() - util.newDate(curPos.locationTime).getTime()
       time = Math.abs(time / 1000)
-      speed = Number((distance / time) * (60 * 60 / 1000))
-      if (time <= 0 || speed <= 0){
-        speed = 100
+      if(time > 90){
+        time = 10
       }
+      speed = Number((distance / time) * (60 * 60 / 1000))
+      this.curSpeed = speed.toFixed(2)
     }
-    let addSpeed = this.endMarkerMoveArray.length * 1 * markMoveMutiple
-    retSpeed = speed * markMoveMutiple + addSpeed
-    return retSpeed
   }
   /**
    * 获取跳点模式移动速度
@@ -711,9 +800,15 @@ export default class BaseTrack{
     let speed = 0
     if(historys.length >= 2){
       let popPos = historys[historys.length - 2]
-      distance = window.AMap.GeometryUtil.distance(
+
+      // distance = window.AMap.GeometryUtil.distance(
+      //   [popPos.lng, popPos.lat],
+      //   [position.lng, position.lat]
+      // )
+      distance = turf.distance(
         [popPos.lng, popPos.lat],
-        [position.lng, position.lat]
+        [position.lng, position.lat],
+        { units: 'meters' }
       )
       time = util.newDate(position.locationTime).getTime() - util.newDate(popPos.locationTime).getTime()
       time = Math.abs(time / 1000)

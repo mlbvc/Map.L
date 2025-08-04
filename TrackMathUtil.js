@@ -1,4 +1,3 @@
-
 import Util from '../../Common/Utils/Util'
 const util = Util.getInstance()
 export default class TrackMathUtil {

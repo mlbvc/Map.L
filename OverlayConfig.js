@@ -1,4 +1,3 @@
-
 import AlarmType from '../Alarm/AlarmType'
 const data = {
     //轨迹更新间隔
@@ -11,44 +10,54 @@ const data = {
     TrackErrorTime: 1000 * 60 * 1.5,
     //轨迹移动速度
     MarkMoveSpeed: 35,
+    //定位标记配置
+    LocationMarker:{
+      anchor:'center',
+      content:
+        `<div style="width:18px; height: 18px; background-color:#2D94FF; border-radius:9px;box-shadow:0px 0px 3px 3px">
+          <div style="border-radius:21px;position:absolute;top:-2px;bottom:-2px;right:-2px;left:-2px; border:medium solid #fff;"></div>
+        </div>`,
+      zIndex: 999,            //点标记的叠加顺序,默认zIndex：100
+    },
     //圆形标记配置
     CircleMarker:{
+      anchor:'center',
       content:
-        `<div style="width:circleMarkerSizepx; height: circleMarkerSizepx; background-color:circleMarkerColor; border-radius:circleBorderRadiuspx;filter:alpha(Opacity=opacityFilter);-moz-opacity:opacityValue;opacity:opacityValue">
+        `<div style="width:circleMarkerSizepx; height: circleMarkerSizepx; background-color:circleMarkerColor; border-radius:circleBorderRadiuspx;">
           <div style="centerStyle"></div>
         </div>`,
       zIndex: 101,            //点标记的叠加顺序,默认zIndex：100
     },
     //图片标记配置
     CircleMarkerIcon:{
+      anchor:'center',
       content:
-        `<div style="display:flex;justifyContent:center;alignItems:center; width:markerIconSizepx; height: markerIconSizepx; border-radius:markerBorderRadiuspx;filter:alpha(Opacity=opacityFilter);-moz-opacity:opacityValue;opacity:opacityValue">
+        `<div style="display:flex;justifyContent:center;alignItems:center; width:markerIconSizepx; height: markerIconSizepx; border-radius:markerBorderRadiuspx;">
           <div style="centerStyle"></div>
           <img style="width:markerIconSizepx; height: markerIconSizepx" alt="" src="markerIcon"></img>
         </div>`,
       zIndex: 101,
     },
-    //不可视标记配置，用于轨迹尾部动画消失效果
-    InvisibleMarker:{
-      content: `<div></div>`,
-      zIndex: 101,
-    },
+    // //不可视标记配置，用于轨迹尾部动画消失效果
+    // InvisibleMarker:{
+    //   content: `<div></div>`,
+    //   zIndex: 101,
+    // },
     //轨迹折线配置
     Polyline:{
-      borderWeight: 2,        //描边宽度
+      // borderWeight: 2,        //描边宽度
       strokeOpacity: 1,       //线条透明度
       strokeWeight: 5,        //线条颜色
-      strokeStyle: "solid",   //线样式，实线:solid，虚线:dashed
+      // dasharray: 0,           //虚线间隙
       lineJoin: 'round',      //折线拐点的绘制样式，默认值为'miter'尖角，其他可选值：'round'圆角、'bevel'斜角
       zIndex: 99,             //点标记的叠加顺序,默认zIndex：100
       lineCap:'round',        //折线两端线帽的绘制样式，默认值为'butt'无头，其他可选值：'round'圆头、'square'方头
     },
     //名字文本标记配置
     TextString:{
-      textAlign:'center',
-      verticalAlign:'top',
+      anchor:'left',
       content:
-        `<div style="text-align:left;word-break:keep-all;white-space:nowrap;display:flex;align-items:center;filter:alpha(Opacity=opacityFilter);-moz-opacity:opacityValue;opacity:opacityValue">
+        `<div style="text-align:left;word-break:keep-all;white-space:nowrap;display:flex;align-items:center;">
             <div style="position: relative;display: isShow;margin-right:5px;">
               <img style="width:imgWidthpx; height: imgHeightpx;" alt="" src="flag"></img>
             </div>
@@ -63,34 +72,12 @@ const data = {
         </div>`,
       selectedContent:
         `<div style="border:thin solid #000000;background:#ffffff;
-            font-size:13px; height:210px;display:flex;justify-content:center;white-space:nowrap;
-            flex-direction:column; padding-left:15px; padding-right:15px;padding-top:20px">
-          <div style="font-weight:bolder">content</div>
-          <div>battery</div>
-          <div>updateTime</div>
-          <div>signal</div>
-          <div>locationTime</div>
-          <div>sats</div>
-          <div>temp</div>
-          <div>lnglat</div>
-          <div>act</div>
-          <div id="selectedContent" style="position: absolute;top: 4px;right: 4px;
-              font-size: 20px;color: #ccc; text-align: center;line-height: 15px;font-weight:bolder">
-            X
-          </div>
-          <div style="width:10px;height:10px; align-self:center;
-            border-bottom:thin solid #000;border-right:thin solid #000;
-            position:absolute;bottom:-5px;
-            transform:rotate(45deg);background-color:#FFF;"/>
-        </div>`,
-        historySelectedContent:
-        `<div style="border:thin solid #000000;background:#ffffff;
             font-size:13px; height:100px;display:flex;justify-content:center;white-space:nowrap;
             flex-direction:column; padding-left:15px; padding-right:15px;padding-top:20px">
-          <div style="font-weight:bolder">content</div>
-          <div>locationTime</div>
-          <div>lnglat</div>
-          <div id="historySelectedContent" style="position: absolute;top: 4px;right: 4px;
+          <div style="font-weight:bolder">selectedTitle</div>
+          <div>selectedTime</div>
+          <div>selectedLngLat</div>
+          <div id="selectedContent" style="position: absolute;top: 4px;right: 4px;
               font-size: 20px;color: #ccc; text-align: center;line-height: 15px;font-weight:bolder">
             X
           </div>
@@ -103,10 +90,10 @@ const data = {
     },
     //绘制路线折线配置
     RoutePolyline:{
-      borderWeight: 2,        //描边宽度
+      // borderWeight: 2,        //描边宽度
       strokeOpacity: 1,       //线条透明度
       strokeWeight: 5,        //线条颜色
-      strokeStyle: "solid",   //线样式，实线:solid，虚线:dashed
+      // dasharray: 0,           //虚线间隙
       lineJoin: 'round',      //折线拐点的绘制样式，默认值为'miter'尖角，其他可选值：'round'圆角、'bevel'斜角
       zIndex: 98,             //点标记的叠加顺序,默认zIndex：100
       strokeColor: "#3D9FF9",
@@ -118,13 +105,13 @@ const data = {
       SAFE: {
         strokeColor: '#0087CD',
         fillColor: '#0087CD',
-        strokeOpacity:1,
+        // strokeOpacity:1,
         fillOpacity: 0.1
       },
       DANGER: {
         strokeColor: '#FF0000',
         fillColor: '#FF0000',
-        strokeOpacity:1,
+        // strokeOpacity:1,
         fillOpacity: 0.2
       }
     },
@@ -166,10 +153,10 @@ const data = {
     },
     //路程对比路径配置
     DistanceComparisonPolyline:{
-      borderWeight: 2,        //描边宽度
+      // borderWeight: 2,        //描边宽度
       strokeOpacity: 1,       //线条透明度
       strokeWeight: 5,        //线条颜色
-      strokeStyle: "solid",   //线样式，实线:solid，虚线:dashed
+      // dasharray: 0,           //虚线间隙
       lineJoin: 'round',      //折线拐点的绘制样式，默认值为'miter'尖角，其他可选值：'round'圆角、'bevel'斜角
       zIndex: 90,             //点标记的叠加顺序,默认zIndex：100
       lineCap:'round',        //折线两端线帽的绘制样式，默认值为'butt'无头，其他可选值：'round'圆头、'square'方头
@@ -183,6 +170,7 @@ const data = {
     DistanceComparisonColor:'#3D9FF9',
     //路程对比路程标记点配置
     DistanceComparisonMarker:{
+      anchor: 'center',
       content:
         `<div style="text-align:left;word-break:keep-all;white-space:nowrap;background-color:#ffffff;padding:0 2px;border:thin solid textcolor;border-radius:5px;filter:alpha(Opacity=opacityFilter);-moz-opacity:opacityValue;opacity:opacityValue">
             <div style="font-family:SimHei;-webkit-text-stroke: 0.8px textcolor;font-size: textSizepx;align:center;color: textcolor;">
